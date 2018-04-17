@@ -19,6 +19,7 @@ class NMT(nn.Module):
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
+        self.left_decoder = Decoder(trg_vocab_size)
 
     def init_state(self, h0_left):
 
@@ -41,8 +42,9 @@ class NMT(nn.Module):
 
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
-
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+        # left decoder
+        left_dec_states = self.left_decoder(s0, srcs, trgs[::-1], uh, srcs_m, trgs_m[::-1])
+        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
 
 
 class Encoder(nn.Module):
@@ -105,14 +107,18 @@ class Attention(nn.Module):
         self.sa = nn.Linear(dec_hid_size, self.align_size)
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
+        self.left_attn_in = nn.Linear(dec_hid_size, self.align_size)
 
-    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
+    def forward(self, s_tm1, xs_h, uh, xs_mask=None, left_attn=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        e_ij = self.a1(
-            self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
-        if xs_mask is not None: e_ij = e_ij * xs_mask
+        if not left_attn:
+            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
+        else:
+            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + self.left_attn_in(left_attn)[None,:,:])).squeeze(2).exp()
+        if xs_mask is not None:
+            e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
         e_ij = e_ij / e_ij.sum(0)[None, :]
@@ -143,7 +149,7 @@ class Decoder(nn.Module):
                                      self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
     def step(self, s_tm1, xs_h, uh, y_tm1,
-             btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
+             btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None, left_dec_state=None):
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
             elif isinstance(y_tm1, list): y_tm1 = tc.Tensor(y_tm1).long()
@@ -152,12 +158,12 @@ class Decoder(nn.Module):
             y_tm1 = self.trg_lookup_table(y_tm1)
 
         # (slen, batch_size), (batch_size, enc_hid_size)
-        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
+        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask, left_dec_state)
         s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
 
         return attend, s_t, y_tm1, alpha_ij
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None, left_dec_states=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
@@ -189,7 +195,8 @@ class Decoder(nn.Module):
 
             attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                             xs_mask if xs_mask is not None else None,
-                                            ys_mask[k] if ys_mask is not None else None)
+                                            ys_mask[k] if ys_mask is not None else None,
+                                            left_dec_states=left_dec_states[k] if left_dec_states[k] else None)
 
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
@@ -231,4 +238,99 @@ class Decoder(nn.Module):
 
         return logit.max(-1)[0] if self.max_out else self.tanh(logit)
 
+class LeftDecoder(nn.Module):
 
+    def __init__(self, trg_vocab_size, max_out=True):
+
+        super(LeftDecoder, self).__init__()
+
+        self.max_out = max_out
+        self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
+        self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
+        self.tanh = nn.Tanh()
+        self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=2*wargs.enc_hid_size)
+
+        out_size = 2 * wargs.out_size if max_out else wargs.out_size
+        self.ls = nn.Linear(wargs.dec_hid_size, out_size)
+        self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
+        self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
+
+        # self.classifier = Classifier(wargs.out_size, trg_vocab_size,
+        #                              self.trg_lookup_table if wargs.copy_trg_emb is True else None)
+
+    def step(self, s_tm1, xs_h, uh, y_tm1,
+             btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
+        if not isinstance(y_tm1, tc.autograd.variable.Variable):
+            if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
+            elif isinstance(y_tm1, list): y_tm1 = tc.Tensor(y_tm1).long()
+            if wargs.gpu_id: y_tm1 = y_tm1.cuda()
+            y_tm1 = Variable(y_tm1, requires_grad=False, volatile=True)
+            y_tm1 = self.trg_lookup_table(y_tm1)
+
+        # (slen, batch_size), (batch_size, enc_hid_size)
+        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
+        s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
+
+        return attend, s_t, y_tm1, alpha_ij
+
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None):
+
+        tlen_batch_s, tlen_batch_c = [], []
+        y_Lm1, b_size = ys.size(0), ys.size(1)
+        if isAtt is True: attends = []
+        # (max_tlen_batch - 1, batch_size, trg_wemb_size)
+        ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
+        y_tm1_model = ys_e[0]
+        s_tm1_list = []
+        for k in range(y_Lm1):
+
+            if wargs.ss_type is not None and ss_eps < 1. and (wargs.greed_sampling or wargs.bleu_sampling):
+                if wargs.greed_sampling is True:
+                    if oracles is not None:     # joint word and sentence level
+                        _seed = tc.Tensor(b_size, 1).bernoulli_()
+                        _seed = Variable(_seed, requires_grad=False)
+                        if wargs.gpu_id: _seed = _seed.cuda()
+                        y_tm1_oracle = y_tm1_model * _seed + oracles[k] * (1. - _seed)
+                    else:
+                        y_tm1_oracle = y_tm1_model  # word-level oracle (w/o w/ noise)
+                else:
+                    y_tm1_oracle = oracles[k]   # sentence-level oracle
+
+                _g = ss_eps * tc.ones(b_size, 1)
+                _g = tc.bernoulli(_g)   # pick gold with the probability of ss_eps
+                if wargs.gpu_id: _g = _g.cuda()
+                _g = Variable(_g, requires_grad=False)
+                y_tm1 = ys_e[k] * _g + y_tm1_oracle * (1. - _g)
+            else:
+                y_tm1 = ys_e[k]
+
+            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+                                            xs_mask if xs_mask is not None else None,
+                                            ys_mask[k] if ys_mask is not None else None)
+            s_tm1_list.append(s_tm1)
+            # logit = self.step_out(s_tm1, y_tm1, attend)
+            # sent_logit.append(logit)
+
+            # if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
+            #     #logit = self.map_vocab(logit)
+            #     logit = self.classifier.get_a(logit, noise=wargs.greed_gumbel_noise)
+            #     y_tm1_model = logit.max(-1)[1]
+            #     y_tm1_model = self.trg_lookup_table(y_tm1_model)
+
+            #tlen_batch_c.append(attend)
+            #tlen_batch_s.append(s_tm1)
+
+            if isAtt is True: attends.append(alpha_ij)
+
+        #s = tc.stack(tlen_batch_s, dim=0)
+        #c = tc.stack(tlen_batch_c, dim=0)
+        #del tlen_batch_s, tlen_batch_c
+
+        #logit = self.step_out(s, ys_e, c)
+        #if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
+        # logit = tc.stack(sent_logit, dim=0)
+        # logit = logit * ys_mask[:, :, None]  # !!!!
+        #del s, c
+        # results = (logit, tc.stack(attends, 0)) if isAtt is True else logit
+
+        return s_tm1_list
