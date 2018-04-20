@@ -175,7 +175,7 @@ def main():
     wlog('Parameters number: {}/{}'.format(pcnt1, pcnt2))
 
     wlog('\n' + '*' * 30 + ' Trainable parameters ' + '*' * 30)
-    for n, p in nmtModel.get_trainable_parameters(): wlog(n)
+    #  for n, p in nmtModel.get_trainable_parameters(): wlog(n)
     if wargs.model == 8: optim.init_optimizer((p for n, p in nmtModel.get_trainable_parameters()))
     else: optim.init_optimizer(nmtModel.parameters())
 
@@ -187,18 +187,3 @@ def main():
 if __name__ == "__main__":
 
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

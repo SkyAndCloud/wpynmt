@@ -7,6 +7,8 @@ from collections import Counter
 from tools.utils import *
 from tools.bleu import zh_to_chars
 
+import pdb
+
 def ngram_count(words, n):
     if n <= len(words):
         return Counter(zip(*[words[i:] for i in range(n)]))
@@ -105,6 +107,7 @@ def print_multi_bleu(cand_file, ref_fpaths, cased=False, maxn=4, char=False):
     cand.close()
     for fd in refs: fd.close()
 
+    #  pdb.set_trace()
     wlog('BLEU = {:.2f}, {:.1f}/{:.1f}/{:.1f}/{:.1f} '
          '(BP={:.3f}, ratio={:.3f}, hyp_len={:d}, ref_len={:d})'.format(
             score, precisions[0], precisions[1], precisions[2], precisions[3],

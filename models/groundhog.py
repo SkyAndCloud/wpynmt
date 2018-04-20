@@ -2,6 +2,9 @@ import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
+
+import pdb
 
 import wargs
 from gru import GRU
@@ -19,7 +22,7 @@ class NMT(nn.Module):
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
-        self.left_decoder = Decoder(trg_vocab_size)
+        self.left_decoder = LeftDecoder(trg_vocab_size)
 
     def init_state(self, h0_left):
 
@@ -43,7 +46,11 @@ class NMT(nn.Module):
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
         # left decoder
-        left_dec_states = self.left_decoder(s0, srcs, trgs[::-1], uh, srcs_m, trgs_m[::-1])
+        left_dec_states = self.left_decoder(s0, srcs,
+                Variable(tc.from_numpy(np.flip(trgs.data.cpu().numpy(),
+                    0).copy()).cuda()), uh, srcs_m,
+                Variable(tc.from_numpy(np.flip(trgs_m.data.cpu().numpy(),
+                    0).copy()).cuda()))
         return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
 
 
@@ -107,16 +114,18 @@ class Attention(nn.Module):
         self.sa = nn.Linear(dec_hid_size, self.align_size)
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
-        self.left_attn_in = nn.Linear(dec_hid_size, self.align_size)
+        self.left_dec_state_in = nn.Linear(dec_hid_size, self.align_size)
 
-    def forward(self, s_tm1, xs_h, uh, xs_mask=None, left_attn=None):
+    def forward(self, s_tm1, xs_h, uh, xs_mask=None, left_dec_state=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        if not left_attn:
+        if not tc.is_tensor(left_dec_state):
             e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
         else:
-            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + self.left_attn_in(left_attn)[None,:,:])).squeeze(2).exp()
+            #  pdb.set_trace()
+            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh +
+                self.left_dec_state_in(left_dec_state)[None,:,:])).squeeze(2).exp()
         if xs_mask is not None:
             e_ij = e_ij * xs_mask
 
@@ -196,7 +205,7 @@ class Decoder(nn.Module):
             attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                             xs_mask if xs_mask is not None else None,
                                             ys_mask[k] if ys_mask is not None else None,
-                                            left_dec_states=left_dec_states[k] if left_dec_states[k] else None)
+                                            left_dec_state=left_dec_states[k] if tc.is_tensor(left_dec_states[k]) else None)
 
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
