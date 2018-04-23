@@ -127,12 +127,10 @@ class Trainer(object):
                     outputs = self.model(src, trg)
                 else:
                     gold, gold_mask = trgs[1:], trgs_m[1:]
-                    outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
+                    left_logits, left_attend, right_logits, right_attend = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
                                          ss_eps=ss_eps_cur, oracles=batch_oracles)
-                    if len(outputs) == 2: (outputs, _checks) = outputs
-                    if len(outputs) == 2: (outputs, attends) = outputs
 
-                this_bnum = outputs.size(1)
+                this_bnum = left_logits.size(1)
                 epoch_n_sents += this_bnum
                 show_n_sents += this_bnum
                 #batch_loss, batch_correct_num, batch_log_norm = self.classifier(outputs, trgs[1:], trgs_m[1:])
@@ -140,10 +138,11 @@ class Trainer(object):
                 #batch_loss = batch_loss.data[0]
                 #batch_correct_num = batch_correct_num.data[0]
                 batch_loss, batch_correct_num, batch_Z = self.classifier.snip_back_prop(
-                    outputs, gold, gold_mask, wargs.snip_size)
+                    left_logits, right_logits, gold, gold_mask, wargs.snip_size)
 
                 self.optim.step()
-                grad_checker(self.model, _checks)
+                grad_checker(self.model, left_attend)
+                grad_checker(self.model, right_attend)
 
                 batch_src_words = srcs.data.ne(PAD).sum()
                 assert batch_src_words == slens.data.sum()

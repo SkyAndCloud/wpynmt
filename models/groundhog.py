@@ -46,13 +46,13 @@ class NMT(nn.Module):
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
         # left decoder
-        left_dec_states = self.left_decoder(s0, srcs,
+        left_logits, left_dec_states, left_attend = self.left_decoder(s0, srcs,
                 Variable(tc.from_numpy(np.flip(trgs.data.cpu().numpy(),
                     0).copy()).cuda()), uh, srcs_m,
                 Variable(tc.from_numpy(np.flip(trgs_m.data.cpu().numpy(),
                     0).copy()).cuda()))
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
-
+        right_logits, right_attend = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
+        return left_logits, left_attend, right_logits, right_attend
 
 class Encoder(nn.Module):
 
@@ -264,8 +264,8 @@ class LeftDecoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
 
-        # self.classifier = Classifier(wargs.out_size, trg_vocab_size,
-        #                              self.trg_lookup_table if wargs.copy_trg_emb is True else None)
+        self.classifier = Classifier(wargs.out_size, trg_vocab_size,
+                                     self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
     def step(self, s_tm1, xs_h, uh, y_tm1,
              btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
@@ -317,8 +317,8 @@ class LeftDecoder(nn.Module):
                                             xs_mask if xs_mask is not None else None,
                                             ys_mask[k] if ys_mask is not None else None)
             s_tm1_list.append(s_tm1)
-            # logit = self.step_out(s_tm1, y_tm1, attend)
-            # sent_logit.append(logit)
+            logit = self.step_out(s_tm1, y_tm1, attend)
+            sent_logit.append(logit)
 
             # if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
             #     #logit = self.map_vocab(logit)
@@ -337,9 +337,23 @@ class LeftDecoder(nn.Module):
 
         #logit = self.step_out(s, ys_e, c)
         #if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
-        # logit = tc.stack(sent_logit, dim=0)
-        # logit = logit * ys_mask[:, :, None]  # !!!!
-        #del s, c
-        # results = (logit, tc.stack(attends, 0)) if isAtt is True else logit
 
-        return s_tm1_list
+        # 人国中是我 -> 我是中国人
+        logit = tc.stack(sent_logit[::-1], dim=0)
+        logit = logit * ys_mask[:, :, None]  # !!!!
+        #del s, c
+        results = (logit, s_tm1_list, tc.stack(attends, 0)) if isAtt is True else (logit, s_tm1_list)
+
+        return results
+
+    def step_out(self, s, y, c):
+        # (max_tlen_batch - 1, batch_size, dec_hid_size)
+        logit = self.ls(s) + self.ly(y) + self.lc(c)
+        # (max_tlen_batch - 1, batch_size, out_size)
+
+        if logit.dim() == 2:    # for decoding
+            logit = logit.view(logit.size(0), logit.size(1)/2, 2)
+        elif logit.dim() == 3:
+            logit = logit.view(logit.size(0), logit.size(1), logit.size(2)/2, 2)
+
+        return logit.max(-1)[0] if self.max_out else self.tanh(logit)

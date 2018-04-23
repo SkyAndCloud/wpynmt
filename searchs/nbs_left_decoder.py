@@ -11,7 +11,7 @@ from tools.utils import *
 
 import time
 
-class Nbs(object):
+class NbsLeftDecoder(object):
 
     def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False,
                  print_att=False, batch_sample=False):
@@ -19,8 +19,7 @@ class Nbs(object):
         if isinstance(model, tc.nn.DataParallel): self.model = model.module
         else: self.model = model
 
-        self.decoder = self.model.decoder
-        self.left_states = []
+        self.decoder = self.model.left_decoder
         self.k = k
         self.ptv = ptv
         self.noise = noise
@@ -32,9 +31,8 @@ class Nbs(object):
         self.batch_sample = batch_sample
         debug('Batch sampling by beam search ... {}'.format(batch_sample))
 
-    def beam_search_trans(self, x_LB, x_mask=None, y_mask=None, left_states=None):
-        if left_states:
-            self.left_states = left_states
+    def beam_search_trans(self, x_LB, x_mask=None, y_mask=None):
+
         #print '-------------------- one sentence ............'
         self.trgs_len = y_mask.sum(0).data.int().tolist() if y_mask is not None else None
         if isinstance(x_LB, list): x_LB = tc.Tensor(x_LB).long().unsqueeze(-1)
@@ -81,7 +79,7 @@ class Nbs(object):
         debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
         #return filter_reidx(best_trans, self.tvcb_i2w), best_loss, attent_matrix
-        return self.batch_tran_cands
+        return self.batch_tran_cands[0][0][-1]
 
     ##################################################################
 
@@ -225,8 +223,7 @@ class Nbs(object):
             debug(y_im1)
             step_output = self.decoder.step(
                 s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
-                btg_xs_mask=btg_xs_mask,
-                left_dec_state=self.left_states[i] if i < len(self.left_states) else None)
+                btg_xs_mask=btg_xs_mask)
             a_i, s_i, y_im1, alpha_ij = step_output[:4]
             # (n_remainings*p, enc_hid_size), (n_remainings*p, dec_hid_size),
             # (n_remainings*p, trg_wemb_size), (x_maxL, n_remainings*p)

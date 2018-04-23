@@ -18,8 +18,11 @@ elif wargs.model == 5: from searchs.nbs_sru import *
 elif wargs.model == 6: from searchs.nbs_cyk import *
 elif wargs.model == 8: from searchs.nbs_t2t import *
 
-if wargs.search_mode == 1: from searchs.nbs import *
-else: from searchs.cp import *
+if wargs.search_mode == 1:
+    from searchs.nbs import *
+    from search.nbs_left_decoder import *
+else:
+    from searchs.cp import *
 
 from tools.utils import *
 from tools.bleu import bleu_file
@@ -46,8 +49,9 @@ class Translator(object):
         self.search_mode = search_mode if search_mode else wargs.search_mode
 
         if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
-        elif self.search_mode == 1: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
-                                                   noise=self.noise, print_att=print_att)
+        elif self.search_mode == 1:
+            self.nbs = Nbs(model, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
+            self.left_nbs = NbsLeftDecoder(model, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
         elif self.search_mode == 2: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k,
                                                    print_att=print_att)
 
@@ -55,11 +59,16 @@ class Translator(object):
 
         trans_start = time.time()
 
-        if self.search_mode == 0: trans = self.greedy.greedy_trans(s)
-        elif self.search_mode == 1: batch_tran_cands = self.nbs.beam_search_trans(s)
+        if self.search_mode == 0:
+            trans = self.greedy.greedy_trans(s)
+        elif self.search_mode == 1:
+            left_states = self.left_nbs.beam_search_trans(s)
+            left_states = left_states[::-1]
+            batch_tran_cands = self.nbs.beam_search_trans(s, left_states=left_states)
         #elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
-        elif self.search_mode == 2: batch_tran_cands = self.wcp.cube_prune_trans(s)
-        trans, loss, attent_matrix = batch_tran_cands[0][0] # first sent, best cand
+        elif self.search_mode == 2:
+            batch_tran_cands = self.wcp.cube_prune_trans(s)
+        trans, loss, attent_matrix, best_states = batch_tran_cands[0][0] # first sent, best cand
         trans, ids = filter_reidx(trans, self.tvcb_i2w)
 
         #spend = time.time() - trans_start

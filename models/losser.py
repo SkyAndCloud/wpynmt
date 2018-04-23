@@ -94,22 +94,26 @@ class Classifier(nn.Module):
         return nll, pred_correct, batch_Z
 
     #   outputs: the predict outputs from the model.
-    #   gold: correct target sentences in current batch 
-    def snip_back_prop(self, outputs, gold, gold_mask, shard_size=100):
+    #   gold: correct target sentences in current batch
+    def snip_back_prop(self, left_logits, right_logits, gold, gold_mask, shard_size=100):
 
         """
         Compute the loss in shards for efficiency.
         """
         batch_loss, batch_correct_num, batch_Z = 0, 0, 0
-        cur_batch_count = outputs.size(1)
-        shard_state = { "feed": outputs, "gold": gold, 'gold_mask': gold_mask }
+        cur_batch_count = left_logits.size(1)
 
+        shard_state = { "left_feed": left_logits, "right_feed": right_logits, "gold": gold, 'gold_mask': gold_mask }
         for shard in shards(shard_state, shard_size):
-            loss, pred_correct, _batch_Z = self(**shard)
-            batch_loss += loss.data.clone()[0]
-            batch_correct_num += pred_correct.data.clone()[0]
-            batch_Z += _batch_Z.data.clone()[0]
-            loss.div(cur_batch_count).backward()
+            loss, pred_correct, _batch_Z = self(shard["left_feed"], shard["gold"], shard["gold_mask"])
+            right_loss, right_pred_correct, right_batch_Z = self(shard["right_feed"], shard["gold"], shard["gold_mask"])
+
+            batch_correct_num = batch_correct_num + pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
+            batch_Z = batch_Z + _batch_Z.data.clone()[0] + right_batch_Z.data.clone()[0]
+
+            shard_loss = loss + right_loss
+            batch_loss += shard_loss.data.clone()[0]
+            shard_loss.div(cur_batch_count).backward()
 
         return batch_loss, batch_correct_num, batch_Z
 
