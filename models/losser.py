@@ -113,7 +113,9 @@ class Classifier(nn.Module):
 
             shard_loss = loss + right_loss
             batch_loss += shard_loss.data.clone()[0]
-            wlog("left_loss:{:>5}|left_correct_num:{:>5}|right_loss:{:>5}|right_correct_num:{:>5}".format(loss, pred_correct, right_loss, right_pred_correct))
+            wlog("left_loss:{:>5}|left_correct_num:{:>5}|right_loss:{:>5}|right_correct_num:{:>5}".format(loss.data.numpy()[0],
+                pred_correct.data.numpy()[0], right_loss.data.numpy()[0],
+                right_pred_correct.data.numpy()[0]))
             shard_loss.div(cur_batch_count).backward()
 
         return batch_loss, batch_correct_num, batch_Z
@@ -169,5 +171,3 @@ def shards(state, shard_size, eval=False):
                      if isinstance(v, Variable) and v.grad is not None)
         inputs, grads = zip(*variables)
         tc.autograd.backward(inputs, grads)
-
-
