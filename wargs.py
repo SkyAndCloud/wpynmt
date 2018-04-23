@@ -169,12 +169,13 @@ eval_valid_from = 500 if eval_small else 100000
 eval_valid_freq = 100 if eval_small else 20000
 
 save_one_model = True
-start_epoch = 2
+start_epoch = 1
 
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
-pre_train = './wmodel/model.pt'
+#pre_train = './wmodel/model.pt'
+pre_train = None
 #pre_train = best_model
 fix_pre_params = False
 
@@ -265,7 +266,7 @@ sampling = 'length_limit'     # truncation, length_limit, gumbeling
 #tests_prefix = None
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [3]
+gpu_id = [1]
 #gpu_id = None
 
 # Transfomer

@@ -20,7 +20,7 @@ elif wargs.model == 8: from searchs.nbs_t2t import *
 
 if wargs.search_mode == 1:
     from searchs.nbs import *
-    from search.nbs_left_decoder import *
+    from searchs.nbs_left_decoder import *
 else:
     from searchs.cp import *
 
@@ -425,7 +425,3 @@ if __name__ == "__main__":
     import sys
     res = valid_bleu(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
     wlog(res)
-
-
-
-

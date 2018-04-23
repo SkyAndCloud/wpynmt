@@ -1,3 +1,4 @@
+# coding=utf-8
 import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
@@ -46,13 +47,13 @@ class NMT(nn.Module):
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
         # left decoder
-        left_logits, left_dec_states, left_attend = self.left_decoder(s0, srcs,
+        left_logits, left_dec_states = self.left_decoder(s0, srcs,
                 Variable(tc.from_numpy(np.flip(trgs.data.cpu().numpy(),
                     0).copy()).cuda()), uh, srcs_m,
                 Variable(tc.from_numpy(np.flip(trgs_m.data.cpu().numpy(),
                     0).copy()).cuda()))
-        right_logits, right_attend = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
-        return left_logits, left_attend, right_logits, right_attend
+        right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
+        return left_logits, right_logits
 
 class Encoder(nn.Module):
 
@@ -291,6 +292,7 @@ class LeftDecoder(nn.Module):
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         y_tm1_model = ys_e[0]
         s_tm1_list = []
+        sent_logit = []
         for k in range(y_Lm1):
 
             if wargs.ss_type is not None and ss_eps < 1. and (wargs.greed_sampling or wargs.bleu_sampling):

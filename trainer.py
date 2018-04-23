@@ -127,7 +127,7 @@ class Trainer(object):
                     outputs = self.model(src, trg)
                 else:
                     gold, gold_mask = trgs[1:], trgs_m[1:]
-                    left_logits, left_attend, right_logits, right_attend = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
+                    left_logits, right_logits = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
                                          ss_eps=ss_eps_cur, oracles=batch_oracles)
 
                 this_bnum = left_logits.size(1)
@@ -141,8 +141,6 @@ class Trainer(object):
                     left_logits, right_logits, gold, gold_mask, wargs.snip_size)
 
                 self.optim.step()
-                grad_checker(self.model, left_attend)
-                grad_checker(self.model, right_attend)
 
                 batch_src_words = srcs.data.ne(PAD).sum()
                 assert batch_src_words == slens.data.sum()
@@ -239,4 +237,3 @@ class Trainer(object):
 
         wlog('Finish training, comsuming {:6.2f} hours'.format((time.time() - train_start) / 3600))
         wlog('Congratulations!')
-
