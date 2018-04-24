@@ -180,8 +180,8 @@ class Trainer(object):
                             show_src_words / ud, show_trg_words / ud, ud,
                             (time.time() - train_start) / 60.)
                     )
-                    show_loss, show_src_words, show_trg_words, show_correct_num, \
-                            show_batch_logZ, show_n_sents = 0, 0, 0, 0, 0, 0
+                    show_loss, show_left_loss, show_right_loss, show_src_words, show_trg_words, show_correct_num, \
+                            show_batch_logZ, show_n_sents = 0, 0, 0, 0, 0, 0, 0, 0
                     sample_spend, eval_spend = 0, 0
                     show_start = time.time()
 
