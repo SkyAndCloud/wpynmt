@@ -60,16 +60,16 @@ trg_dict = dir_data + 'trg.dict.tcf'
 
 inputs_data = dir_data + 'inputs.pt'
 
-with_bpe = False
-with_postproc = False
+with_bpe = True
+with_postproc = True
 copy_trg_emb = False
 # Training
 max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
-eval_small = True
+small = False
+eval_small = False
 epoch_eval = False
 final_test = False
 char = False
@@ -165,8 +165,8 @@ display_freq = 10 if small else 1000
 sampling_freq = 100 if small else 5000
 sample_size = 5
 if_fixed_sampling = False
-eval_valid_from = 5 if eval_small else 100000
-eval_valid_freq = 1 if eval_small else 20000
+eval_valid_from = 50 if eval_small else 100000
+eval_valid_freq = 10 if eval_small else 20000
 
 save_one_model = True
 start_epoch = 1

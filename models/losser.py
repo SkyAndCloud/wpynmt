@@ -100,7 +100,8 @@ class Classifier(nn.Module):
         """
         Compute the loss in shards for efficiency.
         """
-        batch_loss, batch_correct_num, batch_Z = 0, 0, 0
+        batch_correct_num, batch_Z = 0, 0
+        left_total_loss, right_total_loss = 0, 0
         cur_batch_count = left_logits.size(1)
 
         shard_state = { "left_feed": left_logits, "right_feed": right_logits, "gold": gold, 'gold_mask': gold_mask }
@@ -111,14 +112,11 @@ class Classifier(nn.Module):
             batch_correct_num = batch_correct_num + pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
             batch_Z = batch_Z + _batch_Z.data.clone()[0] + right_batch_Z.data.clone()[0]
 
+            right_total_loss += loss.data.clone()[0]
+            left_total_loss += right_loss.data.clone()[0]
             shard_loss = loss + right_loss
-            batch_loss += shard_loss.data.clone()[0]
-            wlog("left_loss:{:>5}|left_correct_num:{:>5}|right_loss:{:>5}|right_correct_num:{:>5}".format(loss.data.numpy()[0],
-                pred_correct.data.numpy()[0], right_loss.data.numpy()[0],
-                right_pred_correct.data.numpy()[0]))
             shard_loss.div(cur_batch_count).backward()
-
-        return batch_loss, batch_correct_num, batch_Z
+        return left_total_loss, right_total_loss, batch_correct_num, batch_Z
 
 def filter_shard_state(state):
     for k, v in state.items():

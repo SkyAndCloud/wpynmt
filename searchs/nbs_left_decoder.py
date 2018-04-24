@@ -79,7 +79,7 @@ class NbsLeftDecoder(object):
         debug('Step[{}] stepout[{}]'.format(*self.C[2:]))
 
         #return filter_reidx(best_trans, self.tvcb_i2w), best_loss, attent_matrix
-        return self.batch_tran_cands[0][0][0], self.batch_tran_cands[0][0][-1]
+        return self.batch_tran_cands[0][0][-1]
 
     ##################################################################
 
