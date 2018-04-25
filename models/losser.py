@@ -115,7 +115,7 @@ class Classifier(nn.Module):
 
         for s in xrange(batch_size):
             reverse_seq(tgt_t_np[s])
-        return Variable(tc.from_numpy(tgt_t_np).cuda())
+        return Variable(tc.from_numpy(tgt_t_np.T).cuda())
 
     #   outputs: the predict outputs from the model.
     #   gold: correct target sentences in current batch

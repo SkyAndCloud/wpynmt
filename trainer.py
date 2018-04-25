@@ -128,7 +128,7 @@ class Trainer(object):
                     if gold_mask.is_contiguous() is False: gold_mask = gold_mask.contiguous()
                     outputs = self.model(src, trg)
                 else:
-                    if wargs.sampling_freq - epoch_bidx <= 3:
+                    if wargs.sampling_freq - epoch_bidx <= 3 and wargs.sampling_freq - epoch_bidx >= 0:
                         pdb.set_trace()
                     gold, gold_mask = trgs[1:], trgs_m[1:]
                     left_logits, right_logits = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],

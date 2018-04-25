@@ -62,7 +62,7 @@ class NMT(nn.Module):
 
         for s in xrange(batch_size):
             reverse_seq(tgt_t_np[s])
-        return Variable(tc.from_numpy(tgt_t_np).cuda())
+        return Variable(tc.from_numpy(tgt_t_np.T).cuda())
 
     def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False,
                 ss_eps=1., oracles=None):
@@ -71,6 +71,8 @@ class NMT(nn.Module):
         s0, srcs, uh = self.init(srcs, srcs_m, False)
         # left decoder
         reversed_tgts = self.reverse_batch_padded_seq(trgs)
+        # e d c b a <eos> 0 0
+        # -------------->
         left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, trgs_m)
         right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
         return left_logits, right_logits
@@ -360,10 +362,9 @@ class LeftDecoder(nn.Module):
         #logit = self.step_out(s, ys_e, c)
         #if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
 
-        # 人国中是我 -> 我是中国人
-        logit = tc.stack(sent_logit[::-1], dim=0)
-        reversed_ys_mask = Variable(tc.from_numpy(np.flip(ys_mask.data.cpu().numpy(), 0).copy()).cuda())
-        logit = logit * reversed_ys_mask[:, :, None]  # !!!!
+        # e d c b a <eos> 0 0
+        logit = tc.stack(sent_logit, dim=0)
+        logit = logit * ys_mask[:, :, None]  # !!!!
         #del s, c
         results = (logit, s_tm1_list, tc.stack(attends, 0)) if isAtt is True else (logit, s_tm1_list)
 
