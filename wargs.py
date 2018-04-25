@@ -162,11 +162,11 @@ elif dataset == 'L':
     #eval_small = True
 
 display_freq = 10 if small else 1000
-sampling_freq = 100 if small else 5000
+sampling_freq = 100 if small else 3000
 sample_size = 5
 if_fixed_sampling = False
-eval_valid_from = 50 if eval_small else 100000
-eval_valid_freq = 10 if eval_small else 20000
+eval_valid_from = 500 if eval_small else 100000
+eval_valid_freq = 100 if eval_small else 20000
 
 save_one_model = True
 start_epoch = 1
@@ -266,7 +266,7 @@ sampling = 'length_limit'     # truncation, length_limit, gumbeling
 #tests_prefix = None
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [1]
+gpu_id = [3]
 #gpu_id = None
 
 # Transfomer

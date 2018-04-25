@@ -1,6 +1,7 @@
 #( -*- coding: utf-8 -*-
 from __future__ import division
 
+import pdb
 import os
 import re
 import sys
@@ -63,6 +64,7 @@ class Translator(object):
             trans = self.greedy.greedy_trans(s)
         elif self.search_mode == 1:
             left_logits, left_states = self.left_nbs.beam_search_trans(s)
+            #  pdb.set_trace()
             left_logits = left_logits[::-1]
             left_states = left_states[::-1]
             batch_tran_cands = self.nbs.beam_search_trans(s, left_states=left_states)

@@ -342,7 +342,8 @@ class LeftDecoder(nn.Module):
 
         # 人国中是我 -> 我是中国人
         logit = tc.stack(sent_logit[::-1], dim=0)
-        logit = logit * ys_mask[:, :, None]  # !!!!
+        reversed_ys_mask = Variable(tc.from_numpy(np.flip(ys_mask.data.cpu().numpy(), 0).copy()).cuda())
+        logit = logit * reversed_ys_mask[:, :, None]  # !!!!
         #del s, c
         results = (logit, s_tm1_list, tc.stack(attends, 0)) if isAtt is True else (logit, s_tm1_list)
 

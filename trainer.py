@@ -1,5 +1,6 @@
 from __future__ import division
 
+import pdb
 import os
 import sys
 import math
@@ -127,6 +128,8 @@ class Trainer(object):
                     if gold_mask.is_contiguous() is False: gold_mask = gold_mask.contiguous()
                     outputs = self.model(src, trg)
                 else:
+                    #  if bidx > 300:
+                        #  pdb.set_trace()
                     gold, gold_mask = trgs[1:], trgs_m[1:]
                     left_logits, right_logits = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
                                          ss_eps=ss_eps_cur, oracles=batch_oracles)
