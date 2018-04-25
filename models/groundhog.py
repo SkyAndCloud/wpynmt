@@ -41,23 +41,37 @@ class NMT(nn.Module):
 
         return s0, xs, uh
 
+    def reverse_batch_padded_seq(self, tgt):
+        # S,B => B,S
+        tgt_t = tc.transpose(tgt, 0, 1)
+        tgt_t_np = tgt_t.data.cpu().numpy().copy()
+        batch_size, seq_len = tgt_t_np.shape
+
+        # <bos> a b c d e 0 0 => <bos> e d c b a 0 0
+        def reverse_seq(seq):
+            left = 1
+            right = seq_len - 1
+            while seq[right] == 0:
+                right -= 1
+            while left < right:
+                tmp = seq[right]
+                seq[right] = seq[left]
+                seq[left] = tmp
+                left += 1
+                right -= 1
+
+        for s in xrange(batch_size):
+            reverse_seq(tgt_t_np[s])
+        return Variable(tc.from_numpy(tgt_t_np).cuda())
+
     def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False,
                 ss_eps=1., oracles=None):
 
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
-
         # left decoder
-        # <bos> a b c d e => e d c b a <bos>
-        reversed_tgts_mask = np.flip(trgs_m.data.cpu().numpy(), 0).copy()
-        # e d c b a <bos> => <bos> e d c b a
-        reversed_tgts_mask = np.roll(reversed_tgts_mask, 1)
-        reversed_tgts_mask = Variable(tc.from_numpy(reversed_tgts_mask).cuda())
-        reversed_tgts = np.flip(trgs.data.cpu().numpy(), 0).copy()
-        reversed_tgts = np.roll(reversed_tgts, 1)
-        reversed_tgts = Variable(tc.from_numpy(reversed_tgts).cuda())
-
-        left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, reversed_tgts_mask)
+        reversed_tgts = self.reverse_batch_padded_seq(trgs)
+        left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, trgs_m)
         right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
         return left_logits, right_logits
 
