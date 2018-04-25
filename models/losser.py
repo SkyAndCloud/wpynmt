@@ -94,6 +94,29 @@ class Classifier(nn.Module):
         # total loss,  correct count in one batch
         return nll, pred_correct, batch_Z
 
+    def reverse_batch_padded_seq(self, tgt):
+        # S,B => B,S
+        tgt_t = tc.transpose(tgt, 0, 1)
+        tgt_t_np = tgt_t.data.cpu().numpy().copy()
+        batch_size, seq_len = tgt_t_np.shape
+
+        # a b c d e <eos> 0 0 0 => e d c b a <eos> 0 0 0
+        def reverse_seq(seq):
+            left = 0
+            right = seq_len - 1
+            while seq[right] == 0:
+                right -= 1
+            while left < right:
+                tmp = seq[right]
+                seq[right] = seq[left]
+                seq[left] = tmp
+                left += 1
+                right -= 1
+
+        for s in xrange(batch_size):
+            reverse_seq(tgt_t_np[s])
+        return Variable(tc.from_numpy(tgt_t_np).cuda())
+
     #   outputs: the predict outputs from the model.
     #   gold: correct target sentences in current batch
     def snip_back_prop(self, left_logits, right_logits, gold, gold_mask, shard_size=100):
@@ -105,24 +128,15 @@ class Classifier(nn.Module):
         left_batch_loss, right_batch_loss = 0, 0
         cur_batch_count = left_logits.size(1)
 
-        # a b c d e <eos> => <eos> e d c b a
-        reversed_gold = np.flip(gold.data.cpu().numpy(), 0).copy()
-        # <eos> e d c b a => e d c b a <eos>
-        reversed_gold = np.roll(reversed_gold, -1)
-        reversed_gold = Variable(tc.from_numpy(reversed_gold).cuda())
 
-        reversed_gold_mask = np.flip(gold_mask.data.cpu().numpy(), 0).copy()
-        reversed_gold_mask = np.roll(reversed_gold_mask, -1)
-        reversed_gold_mask = Variable(tc.from_numpy(reversed_gold_mask).cuda())
-
+        reversed_gold = self.reverse_batch_padded_seq(gold)
         shard_state = { "left_feed": left_logits,
                         "reversed_gold": reversed_gold,
-                        "reversed_gold_mask": reversed_gold_mask,
                         "right_feed": right_logits,
                         "gold": gold,
                         "gold_mask": gold_mask}
         for shard in shards(shard_state, shard_size):
-            left_loss, pred_correct, _batch_Z = self(shard["left_feed"], shard["reversed_gold"], shard["reversed_gold_mask"])
+            left_loss, pred_correct, _batch_Z = self(shard["left_feed"], shard["reversed_gold"], shard["gold_mask"])
             right_loss, right_pred_correct, right_batch_Z = self(shard["right_feed"], shard["gold"], shard["gold_mask"])
 
             batch_correct_num = batch_correct_num + pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
