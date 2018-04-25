@@ -128,8 +128,8 @@ class Trainer(object):
                     if gold_mask.is_contiguous() is False: gold_mask = gold_mask.contiguous()
                     outputs = self.model(src, trg)
                 else:
-                    #  if bidx > 300:
-                        #  pdb.set_trace()
+                    if wargs.sampling_freq - epoch_bidx <= 3:
+                        pdb.set_trace()
                     gold, gold_mask = trgs[1:], trgs_m[1:]
                     left_logits, right_logits = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
                                          ss_eps=ss_eps_cur, oracles=batch_oracles)
@@ -196,7 +196,6 @@ class Trainer(object):
                     sample_src_tensor = srcs.t()[:sample_size]
                     sample_trg_tensor = trgs.t()[:sample_size]
                     sample_src_tensor_pos = T_spos[:sample_size] if wargs.model == 8 else None
-                    pdb.set_trace()
                     tor_hook.trans_samples(sample_src_tensor, sample_trg_tensor, sample_src_tensor_pos)
                     wlog('')
                     sample_spend = time.time() - sample_start
