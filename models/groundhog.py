@@ -46,12 +46,18 @@ class NMT(nn.Module):
 
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
+
         # left decoder
-        left_logits, left_dec_states = self.left_decoder(s0, srcs,
-                Variable(tc.from_numpy(np.flip(trgs.data.cpu().numpy(),
-                    0).copy()).cuda()), uh, srcs_m,
-                Variable(tc.from_numpy(np.flip(trgs_m.data.cpu().numpy(),
-                    0).copy()).cuda()))
+        # <bos> a b c d e => e d c b a <bos>
+        reversed_tgts_mask = np.flip(trgs_m.data.cpu().numpy(), 0).copy()
+        # e d c b a <bos> => <bos> e d c b a
+        reversed_tgts_mask = np.roll(reversed_tgts_mask, 1)
+        reversed_tgts_mask = Variable(tc.from_numpy(reversed_tgts_mask).cuda())
+        reversed_tgts = np.flip(trgs.data.cpu().numpy(), 0).copy()
+        reversed_tgts = np.roll(reversed_tgts, 1)
+        reversed_tgts = Variable(tc.from_numpy(reversed_tgts).cuda())
+
+        left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, reversed_tgts_mask)
         right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
         return left_logits, right_logits
 

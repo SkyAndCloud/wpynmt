@@ -3,6 +3,7 @@ import torch.nn as nn
 
 import wargs
 from tools.utils import *
+import numpy as np
 
 class Classifier(nn.Module):
 
@@ -104,17 +105,32 @@ class Classifier(nn.Module):
         left_batch_loss, right_batch_loss = 0, 0
         cur_batch_count = left_logits.size(1)
 
-        shard_state = { "left_feed": left_logits, "right_feed": right_logits, "gold": gold, 'gold_mask': gold_mask }
+        # a b c d e <eos> => <eos> e d c b a
+        reversed_gold = np.flip(gold.data.cpu().numpy(), 0).copy()
+        # <eos> e d c b a => e d c b a <eos>
+        reversed_gold = np.roll(reversed_gold, -1)
+        reversed_gold = Variable(tc.from_numpy(reversed_gold).cuda())
+
+        reversed_gold_mask = np.flip(gold_mask.data.cpu().numpy(), 0).copy()
+        reversed_gold_mask = np.roll(reversed_gold_mask, -1)
+        reversed_gold_mask = Variable(tc.from_numpy(reversed_gold_mask).cuda())
+
+        shard_state = { "left_feed": left_logits,
+                        "reversed_gold": reversed_gold,
+                        "reversed_gold_mask": reversed_gold_mask,
+                        "right_feed": right_logits,
+                        "gold": gold,
+                        "gold_mask": gold_mask}
         for shard in shards(shard_state, shard_size):
-            loss, pred_correct, _batch_Z = self(shard["left_feed"], shard["gold"], shard["gold_mask"])
+            left_loss, pred_correct, _batch_Z = self(shard["left_feed"], shard["reversed_gold"], shard["reversed_gold_mask"])
             right_loss, right_pred_correct, right_batch_Z = self(shard["right_feed"], shard["gold"], shard["gold_mask"])
 
             batch_correct_num = batch_correct_num + pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
             batch_Z = batch_Z + _batch_Z.data.clone()[0] + right_batch_Z.data.clone()[0]
 
-            left_batch_loss += loss.data.clone()[0]
+            left_batch_loss += left_loss.data.clone()[0]
             right_batch_loss += right_loss.data.clone()[0]
-            shard_loss = loss + right_loss
+            shard_loss = left_loss + right_loss
             shard_loss.div(cur_batch_count).backward()
         return left_batch_loss, right_batch_loss, batch_correct_num, batch_Z
 
