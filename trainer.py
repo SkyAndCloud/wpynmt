@@ -196,6 +196,7 @@ class Trainer(object):
                     sample_src_tensor = srcs.t()[:sample_size]
                     sample_trg_tensor = trgs.t()[:sample_size]
                     sample_src_tensor_pos = T_spos[:sample_size] if wargs.model == 8 else None
+                    pdb.set_trace()
                     tor_hook.trans_samples(sample_src_tensor, sample_trg_tensor, sample_src_tensor_pos)
                     wlog('')
                     sample_spend = time.time() - sample_start
