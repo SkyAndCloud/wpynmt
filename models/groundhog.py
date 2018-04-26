@@ -73,8 +73,17 @@ class NMT(nn.Module):
         reversed_tgts = self.reverse_batch_padded_seq(trgs)
         # e d c b a <eos> 0 0
         # -------------->
-        left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, trgs_m)
-        right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=left_dec_states[::-1])
+        left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, trgs_m) # S,B,H    S,B,H
+        tgts_valid_length = tc.squeeze(tc.sum(trgs_m, dim=0), 0).data.cpu().numpy() # B
+        seq_len, batch_size = trgs_m.size()
+        reversed_left_dec_states = tc.transpose(left_dec_states, 0, 1) # B,S,H
+        temp = []
+        for s in xrange(batch_size):
+            idx = tc.cat((tc.arange(tgts_valid_length[s] - 1, -1, -1).long(),
+                          tc.arange(tgts_valid_length[s], seq_len, 1).long()))
+            temp.append(reversed_left_dec_states[s].index_select(1, idx)) # S,H
+        reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
+        right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=reversed_left_dec_states)
         return left_logits, right_logits
 
 class Encoder(nn.Module):
@@ -228,7 +237,7 @@ class Decoder(nn.Module):
             attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                             xs_mask if xs_mask is not None else None,
                                             ys_mask[k] if ys_mask is not None else None,
-                                            left_dec_state=left_dec_states[k] if tc.is_tensor(left_dec_states[k]) else None)
+                                            left_dec_state=left_dec_states[k])
 
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
@@ -364,9 +373,10 @@ class LeftDecoder(nn.Module):
 
         # e d c b a <eos> 0 0
         logit = tc.stack(sent_logit, dim=0)
+        states = tc.stack(s_tm1_list, dim=0)
         logit = logit * ys_mask[:, :, None]  # !!!!
         #del s, c
-        results = (logit, s_tm1_list, tc.stack(attends, 0)) if isAtt is True else (logit, s_tm1_list)
+        results = (logit, states, tc.stack(attends, 0)) if isAtt is True else (logit, states)
 
         return results
 
