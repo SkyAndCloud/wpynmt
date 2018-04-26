@@ -68,7 +68,7 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = False
+small = True
 eval_small = False
 epoch_eval = False
 final_test = False
