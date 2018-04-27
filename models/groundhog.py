@@ -74,14 +74,17 @@ class NMT(nn.Module):
         # e d c b a <eos> 0 0
         # -------------->
         left_logits, left_dec_states = self.left_decoder(s0, srcs, reversed_tgts, uh, srcs_m, trgs_m) # S,B,H    S,B,H
-        tgts_valid_length = tc.squeeze(tc.sum(trgs_m, dim=0), 0).data.cpu().numpy() # B
+        tgts_valid_length = tc.squeeze(tc.sum(trgs_m, dim=0), 0).data.cpu().numpy().astype(int) # B
         seq_len, batch_size = trgs_m.size()
         reversed_left_dec_states = tc.transpose(left_dec_states, 0, 1) # B,S,H
         temp = []
         for s in xrange(batch_size):
-            idx = tc.cat((tc.arange(tgts_valid_length[s] - 1, -1, -1).long(),
-                          tc.arange(tgts_valid_length[s], seq_len, 1).long()))
-            temp.append(reversed_left_dec_states[s].index_select(1, idx)) # S,H
+            if tgts_valid_length[s] == seq_len:
+                idx = Variable(tc.arange(tgts_valid_length[s] - 1, -1, -1).long().cuda())
+            else:
+                idx = Variable(tc.cat((tc.arange(tgts_valid_length[s] - 1, -1, -1).long(),
+                              tc.arange(tgts_valid_length[s], seq_len, 1).long())).cuda())
+            temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
         reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
         right_logits = self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m, left_dec_states=reversed_left_dec_states)
         return left_logits, right_logits
@@ -152,7 +155,7 @@ class Attention(nn.Module):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        if not tc.is_tensor(left_dec_state):
+        if not isinstance(left_dec_state, Variable):
             e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
         else:
             #  pdb.set_trace()
