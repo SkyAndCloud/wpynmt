@@ -104,8 +104,9 @@ class Classifier(nn.Module):
         def reverse_seq(seq):
             left = 0
             right = seq_len - 1
-            while seq[right] == 0:
+            while seq[right] != 3:
                 right -= 1
+            right -= 1
             while left < right:
                 tmp = seq[right]
                 seq[right] = seq[left]

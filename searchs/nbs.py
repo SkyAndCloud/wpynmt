@@ -226,7 +226,7 @@ class Nbs(object):
             step_output = self.decoder.step(
                 s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
                 btg_xs_mask=btg_xs_mask,
-                left_dec_state=self.left_states[i] if i < len(self.left_states) else self.left_states[len(self.left_states) - 1])
+                left_dec_state=tc.unsqueeze(self.left_states[i], 0) if i < len(self.left_states) else tc.unsqueeze(self.left_states[len(self.left_states) - 1], 0))
             a_i, s_i, y_im1, alpha_ij = step_output[:4]
             # (n_remainings*p, enc_hid_size), (n_remainings*p, dec_hid_size),
             # (n_remainings*p, trg_wemb_size), (x_maxL, n_remainings*p)
@@ -481,6 +481,3 @@ class Nbs(object):
         sidx = numpy.argmin(sample_score)
 
         return sample[sidx], sample_score[sidx]
-
-
-

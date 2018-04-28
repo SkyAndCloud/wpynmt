@@ -6,6 +6,7 @@ from tools.inputs import Input
 from tools.utils import init_dir, wlog, _load_model
 from tools.optimizer import Optim
 from inputs_handler import *
+import tools.crash_on_ipy
 
 # Check if CUDA is available
 if cuda.is_available():
