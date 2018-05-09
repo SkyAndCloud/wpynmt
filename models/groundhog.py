@@ -75,6 +75,9 @@ class NMT(nn.Module):
             reverse_seq(tgt_t_np[s], tgt_mask_t_np[s])
         return Variable(tc.from_numpy(tgt_t_np.T).cuda()), Variable(tc.from_numpy(tgt_mask_t_np.T).cuda())
 
+    def get_trainable_parameters(self):
+        return ((n, p) for (n, p) in self.named_parameters())
+
 class Encoder(nn.Module):
 
     '''
@@ -260,5 +263,3 @@ class Decoder(nn.Module):
             logit = logit.view(logit.size(0), logit.size(1), logit.size(2)/2, 2)
 
         return logit.max(-1)[0] if self.max_out else self.tanh(logit)
-
-

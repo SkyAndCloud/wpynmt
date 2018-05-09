@@ -45,21 +45,26 @@ class Translator(object):
         self.k = k if k else wargs.beam_size
         self.search_mode = search_mode if search_mode else wargs.search_mode
 
-        if self.search_mode == 0: self.greedy = Greedy(self.tvcb_i2w)
-        elif self.search_mode == 1: self.nbs = Nbs(model, self.tvcb_i2w, k=self.k,
-                                                   noise=self.noise, print_att=print_att)
-        elif self.search_mode == 2: self.wcp = Wcp(model, self.tvcb_i2w, k=self.k,
-                                                   print_att=print_att)
+        if self.search_mode == 0:
+            self.greedy = Greedy(self.tvcb_i2w)
+        elif self.search_mode == 1:
+            self.nbs = Nbs(model, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
+        elif self.search_mode == 2:
+            self.wcp = Wcp(model, self.tvcb_i2w, k=self.k, print_att=print_att)
 
     def trans_onesent(self, s):
 
         trans_start = time.time()
 
-        if self.search_mode == 0: trans = self.greedy.greedy_trans(s)
-        elif self.search_mode == 1: batch_tran_cands = self.nbs.beam_search_trans(s)
+        if self.search_mode == 0:
+            trans = self.greedy.greedy_trans(s)
+        elif self.search_mode == 1:
+            batch_tran_cands = self.nbs.beam_search_trans(s)
         #elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
-        elif self.search_mode == 2: batch_tran_cands = self.wcp.cube_prune_trans(s)
+        elif self.search_mode == 2:
+            batch_tran_cands = self.wcp.cube_prune_trans(s)
         trans, loss, attent_matrix = batch_tran_cands[0][0] # first sent, best cand
+        trans = trans[::-1]
         trans, ids = filter_reidx(trans, self.tvcb_i2w)
 
         #spend = time.time() - trans_start
@@ -416,7 +421,3 @@ if __name__ == "__main__":
     import sys
     res = valid_bleu(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
     wlog(res)
-
-
-
-

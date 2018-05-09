@@ -1,8 +1,8 @@
-dataset = 'S' # S for 40k, M for 1.2M, L for wmt en-de
+dataset = 'M' # S for 40k, M for 1.2M, L for wmt en-de
 
 # Maximal sequence length in training data
-max_seq_len = 10000000
-#max_seq_len = 50
+#  max_seq_len = 10000000
+max_seq_len = 50
 
 '''
 Embedding layer
@@ -60,15 +60,15 @@ trg_dict = dir_data + 'trg.dict.tcf'
 
 inputs_data = dir_data + 'inputs.pt'
 
-with_bpe = False
-with_postproc = False
+with_bpe = True
+with_postproc = True
 copy_trg_emb = False
 # Training
 max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = False
+small = True
 eval_small = False
 epoch_eval = False
 final_test = False
@@ -102,7 +102,7 @@ if dataset == 'S':
     #trg_dict_size = 22822
     epoch_eval = True
     small = True
-    use_multi_bleu = False
+    use_multi_bleu = True
     #eval_small = True
     with_bpe = False
     cased = False
@@ -113,25 +113,24 @@ elif dataset == 'M':
     align_size = 512
     dec_hid_size = 512
     out_size = 512
-    val_tst_dir = '/home5/wen/2.data/mt/nist_data_stanseg/'
+    val_tst_dir = './data/'
     #val_tst_dir = '/home/wen/3.corpus/mt/nist_data_stanseg/'
     #val_tst_dir = '/home5/wen/2.data/mt/uy_zh_300w/devtst/'
     #val_tst_dir = '/home/wen/3.corpus/mt/uy_zh_300w/devtst/'
-    val_prefix = 'nist02'
-    dev_prefix = 'nist02'
+    val_prefix = 'devset1_2.lc'
     #val_prefix = 'dev700'
     #dev_prefix = 'dev700'
-    val_src_suffix = '8kbpe.src'
+    val_src_suffix = 'zh'
     #val_src_suffix = 'uy.src'
     #val_src_suffix = 'uy.32kbpe.src'
     #val_src_suffix = 'src'
-    val_ref_suffix = 'ref.plain_'
-    src_dict_size = 50000
-    trg_dict_size = 50000
+    val_ref_suffix = 'en'
+    src_dict_size = 30000
+    trg_dict_size = 30000
     ref_cnt = 4
-    tests_prefix = ['nist03', 'nist04', 'nist05', 'nist06', 'nist08', '900']
+    tests_prefix = ['devset3.lc']
     #tests_prefix = ['tst861']
-    with_bpe = True
+    with_bpe = False
     with_postproc = True
     use_multi_bleu = False
     cased = False
@@ -162,8 +161,8 @@ elif dataset == 'L':
     #small = True
     #eval_small = True
 
-display_freq = 10 if small else 1000
-sampling_freq = 100 if small else 5000
+display_freq = 100 if small else 1000
+sampling_freq = 500 if small else 3000
 sample_size = 5
 if_fixed_sampling = False
 eval_valid_from = 500 if eval_small else 100000
@@ -175,6 +174,7 @@ start_epoch = 1
 model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
+#pre_train = './wmodel/model.pt'
 pre_train = None
 #pre_train = best_model
 fix_pre_params = False
@@ -230,7 +230,7 @@ dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
 dec_layer_cnt = 4
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 1
+model = 0
 
 # convolutional layer
 #fltr_windows = [1, 3, 5]   # windows size
@@ -266,7 +266,7 @@ sampling = 'length_limit'     # truncation, length_limit, gumbeling
 #tests_prefix = None
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [2]
+gpu_id = [0]
 #gpu_id = None
 
 # Transfomer
@@ -280,5 +280,3 @@ d_inner_hid=1024
 n_layers=1
 n_head=8
 warmup_steps=8000
-
-
