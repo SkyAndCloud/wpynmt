@@ -13,13 +13,13 @@ import time
 
 class Nbs(object):
 
-    def __init__(self, model, tvcb_i2w, k=10, ptv=None, noise=False,
+    def __init__(self, model, decoder, tvcb_i2w, k=10, ptv=None, noise=False,
                  print_att=False, batch_sample=False):
 
         if isinstance(model, tc.nn.DataParallel): self.model = model.module
         else: self.model = model
 
-        self.decoder = self.model.decoder
+        self.decoder = decoder
         self.k = k
         self.ptv = ptv
         self.noise = noise

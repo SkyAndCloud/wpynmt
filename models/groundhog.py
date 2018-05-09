@@ -19,6 +19,7 @@ class NMT(nn.Module):
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
+        self.right_decoder = Decoder(trg_vocab_size)
 
     def init_state(self, h0_left):
 
@@ -43,7 +44,9 @@ class NMT(nn.Module):
         s0, srcs, uh = self.init(srcs, srcs_m, False)
         # reverse tgts
         reversed_tgts, tgts_mask_without_eos = self.reverse_batch_padded_seq(trgs, trgs_m)
-        return self.decoder(s0, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
+        left_result = self.decoder(s0, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
+        right_result = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos)
+        return left_result, right_result
 
     def reverse_batch_padded_seq(self, tgt, tgt_mask):
         # S,B => B,S
@@ -138,13 +141,16 @@ class Attention(nn.Module):
         self.sa = nn.Linear(dec_hid_size, self.align_size)
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
+        self.state_in = nn.Linear(dec_hid_size, self.align_size)
 
-    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
+    def forward(self, s_tm1, xs_h, uh, xs_mask=None, state=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        e_ij = self.a1(
-            self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
+        if isinstance(state, Variable):
+            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + self.state_in(state)[None, :, :])).squeeze(2).exp()
+        else:
+            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
@@ -175,8 +181,7 @@ class Decoder(nn.Module):
         self.classifier = Classifier(wargs.out_size, trg_vocab_size,
                                      self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1,
-             btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None, state=None):
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
             elif isinstance(y_tm1, list): y_tm1 = tc.Tensor(y_tm1).long()
@@ -185,12 +190,12 @@ class Decoder(nn.Module):
             y_tm1 = self.trg_lookup_table(y_tm1)
 
         # (slen, batch_size), (batch_size, enc_hid_size)
-        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
+        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask, state=state)
         s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
 
         return attend, s_t, y_tm1, alpha_ij
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None, states=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
@@ -222,7 +227,8 @@ class Decoder(nn.Module):
 
             attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                             xs_mask if xs_mask is not None else None,
-                                            ys_mask[k] if ys_mask is not None else None)
+                                            ys_mask[k] if ys_mask is not None else None,
+                                            state=states[k] if isinstance(states, Variable) else None)
 
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)

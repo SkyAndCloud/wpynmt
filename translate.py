@@ -48,7 +48,8 @@ class Translator(object):
         if self.search_mode == 0:
             self.greedy = Greedy(self.tvcb_i2w)
         elif self.search_mode == 1:
-            self.nbs = Nbs(model, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
+            self.nbs = Nbs(model, model.decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
+            self.right_nbs = Nbs(model, model.right_decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
         elif self.search_mode == 2:
             self.wcp = Wcp(model, self.tvcb_i2w, k=self.k, print_att=print_att)
 
@@ -60,19 +61,22 @@ class Translator(object):
             trans = self.greedy.greedy_trans(s)
         elif self.search_mode == 1:
             batch_tran_cands = self.nbs.beam_search_trans(s)
+            right_batch_tran_cands = self.right_nbs.beam_search_trans(s)
         #elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
         elif self.search_mode == 2:
             batch_tran_cands = self.wcp.cube_prune_trans(s)
         trans, loss, attent_matrix = batch_tran_cands[0][0] # first sent, best cand
         trans = trans[::-1]
         trans, ids = filter_reidx(trans, self.tvcb_i2w)
+        right_trans, right_loss, right_attent_matrix = right_batch_tran_cands[0][0]
+        right_trans, right_ids = filter_reidx(right_trans, self.tvcb_i2w)
 
         #spend = time.time() - trans_start
         #wlog('Word-Level spend: {} / {} = {}'.format(
         #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
         # attent_matrix: (trgL, srcL) numpy
-        return trans, ids, attent_matrix
+        return trans, right_trans, ids, attent_matrix
 
     def trans_samples(self, srcs, trgs, spos=None):
 
@@ -97,7 +101,7 @@ class Translator(object):
                 src_seq, src_pos = src_seq[non_zero_idx], src_pos[non_zero_idx]
                 s_filter = (src_seq[None, :], src_pos[None, :])
 
-            trans, ids, attent_matrix = self.trans_onesent(s_filter)
+            trans, right_trans, ids, attent_matrix = self.trans_onesent(s_filter)
 
             if len(trans) == 2:
                 trans, trg_toks = trans
@@ -120,7 +124,8 @@ class Translator(object):
                 plot_attention(attent_matrix, src_toks, trg_toks, 'att.svg')
 
             #trans = re.sub('( ##AT##)|(##AT## )', '', trans)
-            wlog('[{:3}] {}'.format('Out', trans))
+            wlog('[{:3}] {}'.format('Ldo', trans))
+            wlog('[{:3}] {}'.format('Rdo', right_trans))
 
     def force_decoding(self, batch_tst_data):
 
@@ -183,7 +188,7 @@ class Translator(object):
                     segs = self.segment_src(s_filter, labels[bid].strip().split(' '))
                     trans = []
                     for seg in segs:
-                        seg_trans, ids, _ = self.trans_onesent(seg)
+                        seg_trans, right_trans, ids, _ = self.trans_onesent(seg)
                         if len(seg_trans) == 2:
                             seg_trans, seg_subwords = seg_trans
                             trans_subwords.append('###'.join(seg_subwords))
@@ -195,7 +200,7 @@ class Translator(object):
                     if wargs.word_piece is True: trans_subwords = '###'.join(trans_subwords)
                 else:
                     if fd_attent_matrixs is None:   # need translate
-                        trans, ids, attent_matrix = self.trans_onesent(n_bid_src)
+                        trans, right_trans, ids, attent_matrix = self.trans_onesent(n_bid_src)
                         if len(trans) == 2:
                             trans, trg_toks = trans
                             trans_subwords = '###'.join(trg_toks)

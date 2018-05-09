@@ -87,8 +87,8 @@ class Trainer(object):
             sample_size = wargs.sample_size
             epoch_loss, epoch_trg_words, epoch_num_correct, \
                     epoch_batch_logZ, epoch_n_sents = 0, 0, 0, 0, 0
-            show_loss, show_src_words, show_trg_words, show_correct_num, \
-                    show_batch_logZ, show_n_sents = 0, 0, 0, 0, 0, 0
+            show_loss, show_left_loss, show_right_loss, show_src_words, show_trg_words, show_correct_num, \
+                    show_batch_logZ, show_n_sents = 0, 0, 0, 0, 0, 0, 0, 0
             sample_spend, eval_spend, epoch_bidx = 0, 0, 0
             show_start = time.time()
 
@@ -127,20 +127,19 @@ class Trainer(object):
                     outputs = self.model(src, trg)
                 else:
                     gold, gold_mask = trgs[1:], trgs_m[1:]
-                    outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1],
-                                         ss_eps=ss_eps_cur, oracles=batch_oracles)
-                    if len(outputs) == 2: (outputs, _checks) = outputs
-                    if len(outputs) == 2: (outputs, attends) = outputs
+                    left_outputs, right_outputs = self.model(srcs, trgs[:-1], srcs_m, trgs_m[:-1], ss_eps=ss_eps_cur, oracles=batch_oracles)
+                    # if len(outputs) == 2: (outputs, _checks) = outputs
+                    # if len(outputs) == 2: (outputs, attends) = outputs
 
-                this_bnum = outputs.size(1)
+                this_bnum = left_outputs.size(1)
                 epoch_n_sents += this_bnum
                 show_n_sents += this_bnum
                 #batch_loss, batch_correct_num, batch_log_norm = self.classifier(outputs, trgs[1:], trgs_m[1:])
                 #batch_loss.div(this_bnum).backward()
                 #batch_loss = batch_loss.data[0]
                 #batch_correct_num = batch_correct_num.data[0]
-                batch_loss, batch_correct_num, batch_Z = self.classifier.snip_back_prop(
-                    outputs, gold, gold_mask, wargs.snip_size)
+                left_batch_loss, right_batch_loss, batch_correct_num, batch_Z = self.classifier.snip_back_prop(
+                    left_outputs, right_outputs, gold, gold_mask, wargs.snip_size)
 
                 self.optim.step()
                 grad_checker(self.model, _checks)
@@ -149,9 +148,11 @@ class Trainer(object):
                 assert batch_src_words == slens.data.sum()
                 batch_trg_words = trgs[1:].data.ne(PAD).sum()
 
-                show_loss += batch_loss
+                show_loss += (left_batch_loss + right_batch_loss)
+                show_left_loss += left_batch_loss
+                show_right_loss += right_batch_loss
                 show_correct_num += batch_correct_num
-                epoch_loss += batch_loss
+                epoch_loss += (left_batch_loss + right_batch_loss)
                 epoch_num_correct += batch_correct_num
                 show_src_words += batch_src_words
                 show_trg_words += batch_trg_words
@@ -164,21 +165,24 @@ class Trainer(object):
                     #print show_correct_num, show_loss, show_trg_words, show_loss/show_trg_words
                     ud = time.time() - show_start - sample_spend - eval_spend
                     wlog(
-                        'Epo:{:>2}/{:>2} |[{:^5} {:^5} {:^5}k] |acc:{:5.2f}% |ppl:{:4.2f} '
+                        'Epo:{:>2}/{:>2} |[{:^5} {:^5} {:^5}k] |acc:{:5.2f}% |ppl:{:4.2f} {:4.2f}X{:4.2f}'
                         '||w-logZ|:{:.2f} ||s-logZ|:{:.2f} '
                         '|stok/s:{:>4}/{:>2}={:>2} |ttok/s:{:>2} '
                         '|stok/sec:{:6.2f} |ttok/sec:{:6.2f} |elapsed:{:4.2f}/{:4.2f}m'.format(
                             epoch, wargs.max_epochs, epoch_bidx, batch_idx, bidx/1000,
                             (show_correct_num / show_trg_words) * 100,
-                            math.exp(show_loss / show_trg_words), show_batch_logZ / show_trg_words,
+                            math.exp(show_loss / show_trg_words),
+                            math.exp(show_left_loss / show_trg_words),
+                            math.exp(show_right_loss / show_trg_words),
+                            show_batch_logZ / show_trg_words,
                             show_batch_logZ / show_n_sents,
                             batch_src_words, this_bnum, int(batch_src_words / this_bnum),
                             int(batch_trg_words / this_bnum),
                             show_src_words / ud, show_trg_words / ud, ud,
                             (time.time() - train_start) / 60.)
                     )
-                    show_loss, show_src_words, show_trg_words, show_correct_num, \
-                            show_batch_logZ, show_n_sents = 0, 0, 0, 0, 0, 0
+                    show_loss, show_left_loss, show_right_loss, show_src_words, show_trg_words, show_correct_num, \
+                            show_batch_logZ, show_n_sents = 0, 0, 0, 0, 0, 0, 0, 0
                     sample_spend, eval_spend = 0, 0
                     show_start = time.time()
 
