@@ -102,7 +102,8 @@ class Classifier(nn.Module):
         """
         batch_loss, batch_correct_num, batch_Z = 0, 0, 0
         cur_batch_count = outputs.size(1)
-        shard_state = { "feed": outputs, "gold": gold, 'gold_mask': gold_mask }
+        reversed_gold = self.reverse_batch_padded_seq(gold)
+        shard_state = { "feed": outputs, "gold": reversed_gold, 'gold_mask': gold_mask }
 
         for shard in shards(shard_state, shard_size):
             loss, pred_correct, _batch_Z = self(**shard)
@@ -112,6 +113,30 @@ class Classifier(nn.Module):
             loss.div(cur_batch_count).backward()
 
         return batch_loss, batch_correct_num, batch_Z
+
+    def reverse_batch_padded_seq(self, tgt):
+        # S,B => B,S
+        tgt_t = tc.transpose(tgt, 0, 1)
+        tgt_t_np = tgt_t.data.cpu().numpy().copy()
+        batch_size, seq_len = tgt_t_np.shape
+
+        # a b c d e <eos> 0 0 0 => e d c b a <eos> 0 0 0
+        def reverse_seq(seq):
+            left = 0
+            right = seq_len - 1
+            while seq[right] != 3:
+                right -= 1
+            right -= 1
+            while left < right:
+                tmp = seq[right]
+                seq[right] = seq[left]
+                seq[left] = tmp
+                left += 1
+                right -= 1
+
+        for s in xrange(batch_size):
+            reverse_seq(tgt_t_np[s])
+        return Variable(tc.from_numpy(tgt_t_np.T).cuda())
 
 def filter_shard_state(state):
     for k, v in state.items():

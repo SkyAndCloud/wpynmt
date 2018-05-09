@@ -41,9 +41,39 @@ class NMT(nn.Module):
 
         # (max_slen_batch, batch_size, enc_hid_size)
         s0, srcs, uh = self.init(srcs, srcs_m, False)
+        # reverse tgts
+        reversed_tgts, tgts_mask_without_eos = self.reverse_batch_padded_seq(trgs, trgs_m)
+        return self.decoder(s0, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
 
-        return self.decoder(s0, srcs, trgs, uh, srcs_m, trgs_m)
+    def reverse_batch_padded_seq(self, tgt, tgt_mask):
+        # S,B => B,S
+        tgt_t = tc.transpose(tgt, 0, 1)
+        tgt_t_np = tgt_t.data.cpu().numpy().copy()
+        batch_size, seq_len = tgt_t_np.shape
 
+        # S,B => B,S
+        tgt_mask_t = tc.transpose(tgt_mask, 0, 1)
+        tgt_mask_t_np = tgt_mask_t.data.cpu().numpy().copy()
+
+        # <bos> a b c d e <eos> 0 0 => <bos> e d c b a <eos> 0 0
+        def reverse_seq(seq, seq_mask):
+            left = 1
+            right = seq_len - 1
+            while seq[right] == 0:
+                right -= 1
+            if seq[right] == 3:
+                seq_mask[right] = 0
+                right -= 1
+            while left < right:
+                tmp = seq[right]
+                seq[right] = seq[left]
+                seq[left] = tmp
+                left += 1
+                right -= 1
+
+        for s in xrange(batch_size):
+            reverse_seq(tgt_t_np[s], tgt_mask_t_np[s])
+        return Variable(tc.from_numpy(tgt_t_np.T).cuda()), Variable(tc.from_numpy(tgt_mask_t_np.T).cuda())
 
 class Encoder(nn.Module):
 
