@@ -95,24 +95,34 @@ class Classifier(nn.Module):
 
     #   outputs: the predict outputs from the model.
     #   gold: correct target sentences in current batch 
-    def snip_back_prop(self, outputs, gold, gold_mask, shard_size=100):
+    def snip_back_prop(self, left_outputs, right_outputs, gold, gold_mask, shard_size=100):
 
         """
         Compute the loss in shards for efficiency.
         """
-        batch_loss, batch_correct_num, batch_Z = 0, 0, 0
-        cur_batch_count = outputs.size(1)
+        batch_correct_num, batch_Z = 0, 0
+        left_batch_loss, right_batch_loss = 0, 0
+        cur_batch_count = left_outputs.size(1)
         reversed_gold = self.reverse_batch_padded_seq(gold)
-        shard_state = { "feed": outputs, "gold": reversed_gold, 'gold_mask': gold_mask }
+        shard_state = {"left_feed": left_outputs,
+                       "left_gold": reversed_gold,
+                       "right_feed": right_outputs,
+                       "right_gold": gold,
+                       'gold_mask': gold_mask}
 
         for shard in shards(shard_state, shard_size):
-            loss, pred_correct, _batch_Z = self(**shard)
-            batch_loss += loss.data.clone()[0]
-            batch_correct_num += pred_correct.data.clone()[0]
-            batch_Z += _batch_Z.data.clone()[0]
-            loss.div(cur_batch_count).backward()
+            left_loss, left_pred_correct, left_batch_z = self(shard["left_feed"], shard["left_gold"], shard["gold_mask"])
+            right_loss, right_pred_correct, right_batch_z = self(shard["right_feed"], shard["right_gold"], shard["gold_mask"])
 
-        return batch_loss, batch_correct_num, batch_Z
+            batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
+            batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
+
+            left_batch_loss += left_loss.data.clone()[0]
+            right_batch_loss += right_loss.data.clone()[0]
+            shard_loss = left_loss + right_loss
+            right_loss.div(cur_batch_count).backward()
+
+        return left_batch_loss, right_batch_loss, batch_correct_num, batch_Z
 
     def reverse_batch_padded_seq(self, tgt):
         # S,B => B,S
