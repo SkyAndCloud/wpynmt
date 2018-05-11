@@ -94,33 +94,33 @@ class Classifier(nn.Module):
         return nll, pred_correct, batch_Z
 
     #   outputs: the predict outputs from the model.
-    #   gold: correct target sentences in current batch 
+    #   gold: correct target sentences in current batch
     def snip_back_prop(self, left_outputs, right_outputs, gold, gold_mask, shard_size=100):
 
         """
         Compute the loss in shards for efficiency.
         """
-        batch_correct_num, batch_Z = 0, 0
-        left_batch_loss, right_batch_loss = 0, 0
+        left_batch_loss, right_batch_loss, batch_correct_num, batch_Z = 0, 0, 0, 0
         cur_batch_count = left_outputs.size(1)
+
         reversed_gold = self.reverse_batch_padded_seq(gold)
         shard_state = {"left_feed": left_outputs,
                        "left_gold": reversed_gold,
+                       'gold_mask': gold_mask,
                        "right_feed": right_outputs,
-                       "right_gold": gold,
-                       'gold_mask': gold_mask}
+                       "right_gold": gold}
 
         for shard in shards(shard_state, shard_size):
             left_loss, left_pred_correct, left_batch_z = self(shard["left_feed"], shard["left_gold"], shard["gold_mask"])
             right_loss, right_pred_correct, right_batch_z = self(shard["right_feed"], shard["right_gold"], shard["gold_mask"])
 
-            batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
-            batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
-
             left_batch_loss += left_loss.data.clone()[0]
             right_batch_loss += right_loss.data.clone()[0]
+
+            batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
+            batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
             shard_loss = left_loss + right_loss
-            right_loss.div(cur_batch_count).backward()
+            shard_loss.div(cur_batch_count).backward()
 
         return left_batch_loss, right_batch_loss, batch_correct_num, batch_Z
 
@@ -199,5 +199,3 @@ def shards(state, shard_size, eval=False):
                      if isinstance(v, Variable) and v.grad is not None)
         inputs, grads = zip(*variables)
         tc.autograd.backward(inputs, grads)
-
-

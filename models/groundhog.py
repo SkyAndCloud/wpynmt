@@ -19,7 +19,8 @@ class NMT(nn.Module):
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
-        self.right_decoder = Decoder(trg_vocab_size)
+        self.right_decoder = Decoder(trg_vocab_size,
+                classifier=self.decoder.classifier)
 
     def init_state(self, h0_left):
 
@@ -31,11 +32,11 @@ class NMT(nn.Module):
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
-        xs, h0_left = self.encoder(xs, xs_mask)
+        x_s, h0_left = self.encoder(xs, xs_mask)
         s0 = self.init_state(h0_left)
-        uh = self.ha(xs)
+        uh = self.ha(x_s)
 
-        return s0, xs, uh
+        return s0, x_s, uh
 
     def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False,
                 ss_eps=1., oracles=None):
@@ -44,8 +45,18 @@ class NMT(nn.Module):
         s0, srcs, uh = self.init(srcs, srcs_m, False)
         # reverse tgts
         reversed_tgts, tgts_mask_without_eos = self.reverse_batch_padded_seq(trgs, trgs_m)
-        left_result = self.decoder(s0, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
-        right_result = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos)
+        left_result, left_dec_states = self.decoder(s0, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
+
+        tgts_valid_length = tc.squeeze(tc.sum(tgts_mask_without_eos, dim=0), 0).data.cpu().numpy().astype(int) # B
+        seq_len, batch_size = tgts_mask_without_eos.size()
+        reversed_left_dec_states = tc.transpose(left_dec_states, 0, 1) # B,S,H
+        temp = []
+        for s in xrange(batch_size):
+            idx = Variable(tc.cat((tc.arange(tgts_valid_length[s] - 2, -1, -1).long(), tc.arange(tgts_valid_length[s] - 1, seq_len, 1).long())).cuda())
+            temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
+        reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
+
+        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, states=reversed_left_dec_states)
         return left_result, right_result
 
     def reverse_batch_padded_seq(self, tgt, tgt_mask):
@@ -163,7 +174,7 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, trg_vocab_size, max_out=True):
+    def __init__(self, trg_vocab_size, max_out=True, classifier=None):
 
         super(Decoder, self).__init__()
 
@@ -178,8 +189,10 @@ class Decoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
 
-        self.classifier = Classifier(wargs.out_size, trg_vocab_size,
-                                     self.trg_lookup_table if wargs.copy_trg_emb is True else None)
+        if classifier:
+            self.classifier = classifier
+        else:
+            self.classifier = Classifier(wargs.out_size, trg_vocab_size, self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
     def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None, state=None):
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
@@ -202,7 +215,7 @@ class Decoder(nn.Module):
         if isAtt is True: attends = []
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
-        sent_logit, y_tm1_model = [], ys_e[0]
+        sent_logit, states, y_tm1_model = [], [], ys_e[0]
         for k in range(y_Lm1):
 
             if wargs.ss_type is not None and ss_eps < 1. and (wargs.greed_sampling or wargs.bleu_sampling):
@@ -230,6 +243,7 @@ class Decoder(nn.Module):
                                             ys_mask[k] if ys_mask is not None else None,
                                             state=states[k] if isinstance(states, Variable) else None)
 
+            states.append(s_tm1)
             logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
 
@@ -252,8 +266,11 @@ class Decoder(nn.Module):
         #if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
         logit = tc.stack(sent_logit, dim=0)
         logit = logit * ys_mask[:, :, None]  # !!!!
+        states = tc.stack(states, dim=0)
+        states = states * ys_mask[:,:,None]
+
         #del s, c
-        results = (logit, tc.stack(attends, 0)) if isAtt is True else logit
+        results = (logit, states, tc.stack(attends, 0)) if isAtt is True else (logit, states)
 
         return results
 

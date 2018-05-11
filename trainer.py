@@ -5,6 +5,7 @@ import sys
 import math
 import time
 import subprocess
+import pdb
 
 import numpy as np
 import torch as tc
@@ -12,6 +13,7 @@ from torch.autograd import Variable
 
 import wargs
 from tools.utils import *
+import tools.crash_on_ipy
 from translate import Translator
 
 class Trainer(object):
@@ -19,8 +21,10 @@ class Trainer(object):
     def __init__(self, model, train_data, vocab_data, optim, valid_data=None, tests_data=None):
 
         self.model = model
-        if isinstance(model, tc.nn.DataParallel): self.classifier = model.module.decoder.classifier
-        else: self.classifier = model.decoder.classifier
+        if isinstance(model, tc.nn.DataParallel):
+            self.classifier = model.module.decoder.classifier
+        else:
+            self.classifier = model.decoder.classifier
 
         self.train_data = train_data
         self.sv = vocab_data['src'] if wargs.word_piece else vocab_data['src'].idx2key
@@ -138,9 +142,8 @@ class Trainer(object):
                 #batch_loss.div(this_bnum).backward()
                 #batch_loss = batch_loss.data[0]
                 #batch_correct_num = batch_correct_num.data[0]
-                left_batch_loss, right_batch_loss, batch_correct_num, batch_Z = self.classifier.snip_back_prop(
-                    left_outputs, right_outputs, gold, gold_mask, wargs.snip_size)
 
+                left_batch_loss, right_batch_loss, batch_correct_num, batch_z = self.classifier.snip_back_prop(left_outputs, right_outputs, gold, gold_mask, wargs.snip_size)
                 self.optim.step()
                 grad_checker(self.model, _checks)
 
@@ -158,8 +161,8 @@ class Trainer(object):
                 show_trg_words += batch_trg_words
                 epoch_trg_words += batch_trg_words
 
-                show_batch_logZ += batch_Z
-                epoch_batch_logZ += batch_Z
+                show_batch_logZ += batch_z
+                epoch_batch_logZ += batch_z
 
                 if epoch_bidx % wargs.display_freq == 0:
                     #print show_correct_num, show_loss, show_trg_words, show_loss/show_trg_words
@@ -244,4 +247,3 @@ class Trainer(object):
 
         wlog('Finish training, comsuming {:6.2f} hours'.format((time.time() - train_start) / 3600))
         wlog('Congratulations!')
-

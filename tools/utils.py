@@ -273,6 +273,7 @@ def back_tracking(beam, bidx, best_sample_endswith_eos, attent_probs=None):
     best_loss, accum, _, w, bp, endi = best_sample_endswith_eos
     # starting from bp^{th} item in previous {end-1}_{th} beam of eos beam, w is <eos>
     seq = []
+    states = []
     attent_matrix = [] if attent_probs is not None else None
     check = (len(beam[0][0][0]) == 5)
     #print len(attent_probs), endi
@@ -281,10 +282,11 @@ def back_tracking(beam, bidx, best_sample_endswith_eos, attent_probs=None):
         # then use the back pointer to find the best path backward
         # <eos> is in pos endi, we do not keep <eos>
         if check is True:
-            _, _, true_bidx, w, backptr = beam[i][bidx][bp]
+            _, state, true_bidx, w, backptr = beam[i][bidx][bp]
             #if isinstance(true_bidx, int): assert true_bidx == bidx
         else: _, _, _, _, w, backptr = beam[i][bidx][bp]
         seq.append(w)
+        states.append(state)
         bp = backptr
         # ([first word, ..., last word]) with bos and no eos, bos haven't align
         if attent_matrix is not None and i != 0:
@@ -296,8 +298,8 @@ def back_tracking(beam, bidx, best_sample_endswith_eos, attent_probs=None):
         attent_matrix = attent_matrix.cpu().data.numpy()
 
     # seq (bos, t1, t2, t3, t4, ---)
-    # att (---, a0, a1, a2, a3, a4 ) 
-    return seq[::-1], best_loss, attent_matrix # reverse
+    # att (---, a0, a1, a2, a3, a4 )
+    return seq[::-1], best_loss, attent_matrix, states[::-1] # reverse
 
 def filter_reidx(best_trans, tV_i2w=None, ifmv=False, ptv=None):
 
@@ -694,5 +696,3 @@ def proc_bpe(input_fname, output_fname):
     fout = open(output_fname, 'w')
     fout.write(contend)
     fout.close()
-
-

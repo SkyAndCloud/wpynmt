@@ -26,13 +26,16 @@ class Nbs(object):
         self.xs_mask = None
         self.tvcb_i2w = tvcb_i2w
         self.print_att = print_att
+        self.states=[]
 
         self.C = [0] * 4
         self.batch_sample = batch_sample
         debug('Batch sampling by beam search ... {}'.format(batch_sample))
 
-    def beam_search_trans(self, x_LB, x_mask=None, y_mask=None):
+    def beam_search_trans(self, x_LB, x_mask=None, y_mask=None, states=None):
 
+        if states:
+            self.states=states
         #print '-------------------- one sentence ............'
         self.trgs_len = y_mask.sum(0).data.int().tolist() if y_mask is not None else None
         if isinstance(x_LB, list): x_LB = tc.Tensor(x_LB).long().unsqueeze(-1)
@@ -221,13 +224,17 @@ class Nbs(object):
                 btg_xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, n_remainings)
 
             debug(y_im1)
-            step_output = self.decoder.step(
-                s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
-                btg_xs_mask=btg_xs_mask)
-            a_i, s_i, y_im1, alpha_ij = step_output[:4]
-            # (n_remainings*p, enc_hid_size), (n_remainings*p, dec_hid_size),
-            # (n_remainings*p, trg_wemb_size), (x_maxL, n_remainings*p)
+            if isinstance(self.states, Variable):
+                step_output = self.decoder.step(
+                    s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
+                    btg_xs_mask=btg_xs_mask,
+                    state=tc.unsqueeze(self.states[i], 0) if i < len(self.states) else tc.unsqueeze(self.states[0], 0))
+            else:
+                step_output = self.decoder.step(
+                    s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
+                    btg_xs_mask=btg_xs_mask)
 
+            a_i, s_i, y_im1, alpha_ij = step_output[:4]
             self.C[2] += 1
             # (preb_sz, out_size), alpha_ij: (srcL, B*p)
             # logit = self.decoder.logit(s_i)
@@ -478,6 +485,3 @@ class Nbs(object):
         sidx = numpy.argmin(sample_score)
 
         return sample[sidx], sample_score[sidx]
-
-
-
