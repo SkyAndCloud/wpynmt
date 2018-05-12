@@ -77,7 +77,7 @@ class Translator(object):
         #    format_time(spend), len(ids), format_time(spend / len(ids))))
 
         # attent_matrix: (trgL, srcL) numpy
-        return trans, right_trans, ids, attent_matrix
+        return trans, right_trans, right_ids, right_attent_matrix
 
     def trans_samples(self, srcs, trgs, spos=None):
 
@@ -189,7 +189,7 @@ class Translator(object):
                     segs = self.segment_src(s_filter, labels[bid].strip().split(' '))
                     trans = []
                     for seg in segs:
-                        left_trans, seg_trans, ids, _ = self.trans_onesent(seg)
+                        left_trans, seg_trans, ids, attention_matrix = self.trans_onesent(seg)
                         if len(seg_trans) == 2:
                             seg_trans, seg_subwords = seg_trans
                             trans_subwords.append('###'.join(seg_subwords))
