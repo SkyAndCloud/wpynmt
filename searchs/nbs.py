@@ -228,7 +228,7 @@ class Nbs(object):
                 step_output = self.decoder.step(
                     s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
                     btg_xs_mask=btg_xs_mask,
-                    state=tc.unsqueeze(self.states[i], 0) if i < len(self.states) else tc.unsqueeze(self.states[0], 0))
+                    state=tc.unsqueeze(self.states[i], 0) if i < len(self.states-1) else tc.unsqueeze(self.states[0], 0))
             else:
                 step_output = self.decoder.step(
                     s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
