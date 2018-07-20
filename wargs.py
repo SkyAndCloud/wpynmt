@@ -68,8 +68,8 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = False
-eval_small = False
+small = True
+eval_small = True
 epoch_eval = False
 final_test = False
 char = False
@@ -161,8 +161,8 @@ elif dataset == 'L':
     #small = True
     #eval_small = True
 
-display_freq = 10 if small else 1000
-sampling_freq = 50 if small else 3000
+display_freq = 100 if small else 1000
+sampling_freq = 500 if small else 3000
 sample_size = 5
 if_fixed_sampling = False
 eval_valid_from = 500 if eval_small else 100000

@@ -224,13 +224,7 @@ class Nbs(object):
                 btg_xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, n_remainings)
 
             debug(y_im1)
-            if isinstance(self.states, Variable):
-                step_output = self.decoder.step(
-                    s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
-                    btg_xs_mask=btg_xs_mask,
-                    state=tc.unsqueeze(self.states[i], 0) if i < len(self.states-1) else tc.unsqueeze(self.states[0], 0))
-            else:
-                step_output = self.decoder.step(
+            step_output = self.decoder.step(
                     s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
                     btg_xs_mask=btg_xs_mask)
 
@@ -238,7 +232,13 @@ class Nbs(object):
             self.C[2] += 1
             # (preb_sz, out_size), alpha_ij: (srcL, B*p)
             # logit = self.decoder.logit(s_i)
-            logit = self.decoder.step_out(s_i, y_im1, a_i)
+            if isinstance(self.states, Variable):
+                logit = self.decoder.step_out(s_i, y_im1, a_i,
+                        state=tc.unsqueeze(self.states[i], 0) if i <
+                        len(self.states-1) else tc.unsqueeze(self.states[0], 0))
+            else:
+                logit = self.decoder.step_out(s_i, y_im1, a_i, state=None)
+
             self.C[3] += 1
 
             if wargs.dynamic_cyk_decoding is True:

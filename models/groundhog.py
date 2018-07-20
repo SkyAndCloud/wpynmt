@@ -152,16 +152,12 @@ class Attention(nn.Module):
         self.sa = nn.Linear(dec_hid_size, self.align_size)
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
-        self.state_in = nn.Linear(dec_hid_size, self.align_size)
 
-    def forward(self, s_tm1, xs_h, uh, xs_mask=None, state=None):
+    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        if isinstance(state, Variable):
-            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh + self.state_in(state)[None, :, :])).squeeze(2).exp()
-        else:
-            e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
+        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
@@ -186,6 +182,7 @@ class Decoder(nn.Module):
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
+        self.ls_state = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
 
@@ -194,7 +191,7 @@ class Decoder(nn.Module):
         else:
             self.classifier = Classifier(wargs.out_size, trg_vocab_size, self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None, state=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
             elif isinstance(y_tm1, list): y_tm1 = tc.Tensor(y_tm1).long()
@@ -203,7 +200,7 @@ class Decoder(nn.Module):
             y_tm1 = self.trg_lookup_table(y_tm1)
 
         # (slen, batch_size), (batch_size, enc_hid_size)
-        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask, state=state)
+        alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
         s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
 
         return attend, s_t, y_tm1, alpha_ij
@@ -240,11 +237,10 @@ class Decoder(nn.Module):
 
             attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                             xs_mask if xs_mask is not None else None,
-                                            ys_mask[k] if ys_mask is not None else None,
-                                            state=states[k] if isinstance(states, Variable) else None)
+                                            ys_mask[k] if ys_mask is not None else None)
 
             states.append(s_tm1)
-            logit = self.step_out(s_tm1, y_tm1, attend)
+            logit = self.step_out(s_tm1, y_tm1, attend, state=states[k] if isinstance(states, Variable) else None)
             sent_logit.append(logit)
 
             if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
@@ -274,10 +270,13 @@ class Decoder(nn.Module):
 
         return results
 
-    def step_out(self, s, y, c):
+    def step_out(self, s, y, c, state):
 
         # (max_tlen_batch - 1, batch_size, dec_hid_size)
-        logit = self.ls(s) + self.ly(y) + self.lc(c)
+        if isinstance(state, Variable):
+            logit = self.ls(s) + self.ly(y) + self.lc(c) + self.ls_state(state)
+        else:
+            logit = self.ls(s) + self.ly(y) + self.lc(c)
         # (max_tlen_batch - 1, batch_size, out_size)
 
         if logit.dim() == 2:    # for decoding
