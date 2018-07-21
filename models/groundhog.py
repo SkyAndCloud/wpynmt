@@ -56,7 +56,7 @@ class NMT(nn.Module):
             temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
         reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
 
-        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, states=reversed_left_dec_states)
+        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=reversed_left_dec_states)
         return left_result, right_result
 
     def reverse_batch_padded_seq(self, tgt, tgt_mask):
@@ -205,7 +205,7 @@ class Decoder(nn.Module):
 
         return attend, s_t, y_tm1, alpha_ij
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None, states=None):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None, assist_states=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
@@ -240,7 +240,7 @@ class Decoder(nn.Module):
                                             ys_mask[k] if ys_mask is not None else None)
 
             states.append(s_tm1)
-            logit = self.step_out(s_tm1, y_tm1, attend, state=states[k] if isinstance(states, Variable) else None)
+            logit = self.step_out(s_tm1, y_tm1, attend, state=assist_states[k] if isinstance(assist_states, Variable) else None)
             sent_logit.append(logit)
 
             if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
