@@ -234,12 +234,13 @@ class Nbs(object):
             # logit = self.decoder.logit(s_i)
             if isinstance(self.states, Variable):
                 # read
-                logit = self.decoder.step_out(s_i, y_im1, a_i,
-                                              state=tc.unsqueeze(self.states[0], 0))
+                assist_alpha, assist_ctx = self.decoder.assist_attention(s_i, self.states,
+                                                                 self.decoder.assist_attention_w(self.states))
+                logit = self.decoder.step_out(s_i, y_im1, a_i, state_ctx=assist_ctx)
                 # write
-                self.states[0] = self.decoder.write_assist_state(logit, self.states[0])
+                self.states = self.decoder.write_assist_state(logit, self.states, assist_alpha)
             else:
-                logit = self.decoder.step_out(s_i, y_im1, a_i, state=None)
+                logit = self.decoder.step_out(s_i, y_im1, a_i)
 
             self.C[3] += 1
 

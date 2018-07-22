@@ -49,13 +49,14 @@ class NMT(nn.Module):
 
         tgts_valid_length = tc.squeeze(tc.sum(tgts_mask_without_eos, dim=0), 0).data.cpu().numpy().astype(int) # B
         seq_len, batch_size = tgts_mask_without_eos.size()
-        left_dec_last_state = tc.transpose(left_dec_states, 0, 1) # B,S,H
+        reversed_left_dec_states = tc.transpose(left_dec_states, 0, 1) # B,S,H
         temp = []
         for s in xrange(batch_size):
-            temp.append(left_dec_last_state[s][tgts_valid_length[s] - 2]) # H
-        left_dec_last_state = tc.stack(temp, 0) # B,H
+            idx = Variable(tc.cat((tc.arange(tgts_valid_length[s] - 2, -1, -1).long(), tc.arange(tgts_valid_length[s] - 1, seq_len, 1).long())).cuda())
+            temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
+        reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
 
-        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=left_dec_last_state)
+        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=reversed_left_dec_states)
         return left_result, right_result
 
     def reverse_batch_padded_seq(self, tgt, tgt_mask):
@@ -175,6 +176,8 @@ class Decoder(nn.Module):
 
         self.max_out = max_out
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
+        self.assist_attention = Attention(wargs.dec_hid_size, wargs.align_size)
+        self.assist_attention_w = nn.Linear(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
         self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=2*wargs.enc_hid_size)
@@ -185,7 +188,6 @@ class Decoder(nn.Module):
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
 
-        self.write_t = nn.Linear(wargs.dec_hid_size, wargs.dec_hid_size)
         self.write_f = nn.Linear(wargs.batch_size, wargs.dec_hid_size)
         self.write_u = nn.Linear(wargs.dec_hid_size, wargs.dec_hid_size)
 
@@ -243,11 +245,17 @@ class Decoder(nn.Module):
                                             ys_mask[k] if ys_mask is not None else None)
 
             states.append(s_tm1)
-            # read
-            logit = self.step_out(s_tm1, y_tm1, attend, state=assist_states if isinstance(assist_states, Variable) else None)
-            # write
+
             if isinstance(assist_states, Variable):
-                assist_states = self.write_assist_state(logit, assist_states)
+                assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), xs_mask)
+                # read
+                logit = self.step_out(s_tm1, y_tm1, attend, state_ctx=assist_ctx)
+                # write
+                assist_states = self.write_assist_state(logit, assist_states, assist_alpha)
+                assist_states = assist_states * ys_mask[:, :, None]
+            else:
+                logit = self.step_out(s_tm1, y_tm1, attend)
+
             sent_logit.append(logit)
 
             if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
@@ -277,22 +285,24 @@ class Decoder(nn.Module):
 
         return results
 
-    def write_assist_state(self, logit, assist_states):
+    def write_assist_state(self, logit, assist_states, assist_alpha):
         '''
 
         :param logit: B, H
         :param assist_states: B, H
+        :param assist_alpha: S, B, 1
         :return:
         '''
-        forgotten = tc.matmul(assist_states, 1 - self.write_t(F.sigmoid(self.write_f(logit.T))))
-        updated = self.write_t(F.sigmoid(self.write_u(logit)))
-        return forgotten + updated
+        ft, ut = F.sigmoid(self.write_f(logit)), F.sigmoid(self.write_u(logit))
+        alpha_ij = assist_alpha[:, :, None]
 
-    def step_out(self, s, y, c, state):
+        return assist_states * (1. - alpha_ij * ft[None, :, :]) + alpha_ij * ut[None, :, :]
+
+    def step_out(self, s, y, c, state_ctx):
 
         # (max_tlen_batch - 1, batch_size, dec_hid_size)
-        if isinstance(state, Variable):
-            logit = self.ls(s) + self.ly(y) + self.lc(c) + self.ls_state(state)
+        if isinstance(state_ctx, Variable):
+            logit = self.ls(s) + self.ly(y) + self.lc(c) + state_ctx
         else:
             logit = self.ls(s) + self.ly(y) + self.lc(c)
         # (max_tlen_batch - 1, batch_size, out_size)
