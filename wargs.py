@@ -1,5 +1,8 @@
 dataset = 'M' # S for 40k, M for 1.2M, L for wmt en-de
 
+# l2r decoder is lambda, r2l decoder is (1 - lambda)
+lambda_ = 0.5
+
 # Maximal sequence length in training data
 #  max_seq_len = 10000000
 max_seq_len = 50

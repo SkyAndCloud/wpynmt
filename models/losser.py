@@ -119,7 +119,7 @@ class Classifier(nn.Module):
 
             batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
             batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
-            shard_loss = left_loss + right_loss
+            shard_loss = (1 - wargs.lambda_) * left_loss + lambda_ * right_loss
             shard_loss.div(cur_batch_count).backward()
 
         return left_batch_loss, right_batch_loss, batch_correct_num, batch_Z
