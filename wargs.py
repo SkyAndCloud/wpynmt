@@ -71,8 +71,8 @@ max_epochs = 20
 epoch_shuffle = False
 epoch_shuffle_minibatch = 1
 
-small = True
-eval_small = True
+small = False
+eval_small = False
 epoch_eval = False
 final_test = False
 char = False
@@ -269,7 +269,7 @@ sampling = 'length_limit'     # truncation, length_limit, gumbeling
 #tests_prefix = None
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [3]
+gpu_id = [2]
 #gpu_id = None
 
 # Transfomer
