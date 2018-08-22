@@ -8,6 +8,7 @@ import json
 import subprocess
 import math
 import random
+import pdb
 
 import torch as tc
 import torch.nn as nn
@@ -661,7 +662,9 @@ def grad_checker(model, _checks=None):
             continue
         tmp_grad = p.grad.data.cpu().numpy()
         if numpy.isnan(tmp_grad).any(): # we check gradient here for vanishing Gradient
+            #pdb.set_trace()
             wlog("grad contains 'nan' | {}".format(n))
+            wlog("grad p contains 'nan' | {}".format(p))
             #wlog("gradient\n{}".format(tmp_grad))
             _grad_nan = True
         if n == 'decoder.l_f1_0.weight' or n == 's_init.weight' or n=='decoder.l_f1_1.weight' \

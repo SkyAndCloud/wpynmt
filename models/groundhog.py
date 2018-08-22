@@ -295,7 +295,7 @@ class Decoder(nn.Module):
         :param assist_alpha: S, B, 1
         :return:
         '''
-        ft, ut = F.sigmoid(self.write_f(logit)), F.sigmoid(self.write_u(logit))
+        ft, ut = F.tanh(self.write_f(logit)), F.tanh(self.write_u(logit))
         alpha_ij = assist_alpha[:, :, None]
 
         return assist_states * (1. - alpha_ij * ft[None, :, :]) + alpha_ij * ut[None, :, :]

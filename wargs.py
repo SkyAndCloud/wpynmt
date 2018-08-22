@@ -202,7 +202,7 @@ Starting learning rate. If adagrad/adadelta/adam is used, then this is the globa
 Recommended settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.001
 '''
 opt_mode = 'adadelta'
-learning_rate = 1.0
+learning_rate = 1
 rho = 0.95
 
 #opt_mode = 'adam'
@@ -213,7 +213,7 @@ rho = 0.95
 #opt_mode = 'sgd'
 #learning_rate = 1.
 
-max_grad_norm = 1.0
+max_grad_norm = 1
 
 # Start decaying every epoch after and including this epoch
 start_decay_from = None
