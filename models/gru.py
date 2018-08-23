@@ -1,4 +1,5 @@
 import math
+import pdb
 import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
@@ -49,6 +50,8 @@ class GRU(nn.Module):
         if self.enc_hid_size is not None:
             self.crz = nn.Linear(enc_hid_size, 2 * hidden_size)
             self.ch = nn.Linear(enc_hid_size, hidden_size)
+            self.crz_assist = nn.Linear(hidden_size, 2 * hidden_size)
+            self.ch_assist = nn.Linear(hidden_size, hidden_size)
 
         #if self.with_ln is not True:
 
@@ -81,12 +84,10 @@ class GRU(nn.Module):
         x_m: mask of x_t
         h_tm1: previous state
     '''
-    def forward(self, x_t, x_m, h_tm1, attend=None):
-
+    def forward(self, x_t, x_m, h_tm1, attend=None, attend_assist=None):
         x_rz_t, h_rz_tm1, x_h_t = self.xrz(x_t), self.hrz(h_tm1), self.xh(x_t)
 
         if self.with_ln is not True:
-
             if self.enc_hid_size is None:
                 #r_t = self.sigmoid(self.xr(x_t) + self.hr(h_tm1))
                 #z_t = self.sigmoid(self.xz(x_t) + self.hz(h_tm1))
@@ -97,10 +98,12 @@ class GRU(nn.Module):
                 #r_t = self.sigmoid(self.xr(x_t) + self.hr(h_tm1) + self.cr(attend))
                 #h_t_above = self.tanh(self.xh(x_t) + self.hh(r_t * h_tm1) + self.ch(attend))
                 a_rz_t, a_h_t = self.crz(attend), self.ch(attend)
-                rz_t = x_rz_t + h_rz_tm1 + a_rz_t
-
+                if isinstance(attend_assist, Variable):
+                    a_rz_t_assist, a_h_t_assist = self.crz_assist(attend_assist), self.ch_assist(attend_assist)
+                    rz_t = x_rz_t + h_rz_tm1 + a_rz_t + a_rz_t_assist
+                else:
+                    rz_t = x_rz_t + h_rz_tm1 + a_rz_t
         else:
-
             x_rz_t, h_rz_tm1, x_h_t = self.ln0(x_rz_t), self.ln1(h_rz_tm1), self.ln2(x_h_t)
 
             if self.enc_hid_size is None:
@@ -117,8 +120,12 @@ class GRU(nn.Module):
         h_h_tm1 = self.hh(r_t * h_tm1)
         if self.with_ln: h_h_tm1 = self.ln3(h_h_tm1)
         #h_h_tm1 = h_h_tm1 * r_t
-        if self.enc_hid_size is None: h_h_tm1 = x_h_t + h_h_tm1
-        else: h_h_tm1 = x_h_t + h_h_tm1 + a_h_t
+        if self.enc_hid_size is None:
+            h_h_tm1 = x_h_t + h_h_tm1
+        elif isinstance(attend_assist, Variable):
+            h_h_tm1 = x_h_t + h_h_tm1 + a_h_t + a_h_t_assist
+        else:
+            h_h_tm1 = x_h_t + h_h_tm1 + a_h_t
 
         h_t_above = self.tanh(h_h_tm1)
 
@@ -130,4 +137,3 @@ class GRU(nn.Module):
             h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
 
         return h_t
-

@@ -224,24 +224,26 @@ class Nbs(object):
                 btg_xs_mask = tc.stack([item[1][2] for item in prevb], dim=1)   # (L, n_remainings)
 
             debug(y_im1)
-            step_output = self.decoder.step(
-                    s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
-                    btg_xs_mask=btg_xs_mask)
 
-            a_i, s_i, y_im1, alpha_ij = step_output[:4]
-            self.C[2] += 1
             # (preb_sz, out_size), alpha_ij: (srcL, B*p)
             # logit = self.decoder.logit(s_i)
             if isinstance(self.states, Variable):
                 # read
-                assist_alpha, assist_ctx = self.decoder.assist_attention(s_i, self.states,
-                                                                 self.decoder.assist_attention_w(self.states))
-                logit = self.decoder.step_out(s_i, y_im1, a_i, state_ctx=assist_ctx)
+                assist_alpha, assist_ctx = self.decoder.assist_attention(s_i, self.states, self.decoder.assist_attention_w(self.states))
+                step_output = self.decoder.step(
+                        s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
+                        btg_xs_mask=btg_xs_mask, attend_assist=assist_ctx)
+                a_i, s_i, y_im1, alpha_ij = step_output[:4]
                 # write
-                self.states = self.decoder.write_assist_state(logit, self.states, assist_alpha)
+                self.states = self.decoder.write_assist_state(s_i, self.states, assist_alpha)
             else:
-                logit = self.decoder.step_out(s_i, y_im1, a_i)
+                step_output = self.decoder.step(
+                        s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
+                        btg_xs_mask=btg_xs_mask)
+                a_i, s_i, y_im1, alpha_ij = step_output[:4]
 
+            self.C[2] += 1
+            logit = self.decoder.step_out(s_i, y_im1, a_i)
             self.C[3] += 1
 
             if wargs.dynamic_cyk_decoding is True:

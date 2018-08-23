@@ -186,7 +186,6 @@ class Decoder(nn.Module):
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
-        self.ls_assist_ctx = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
         self.lc = nn.Linear(2 * wargs.enc_hid_size, out_size)
 
@@ -198,7 +197,7 @@ class Decoder(nn.Module):
         else:
             self.classifier = Classifier(wargs.out_size, trg_vocab_size, self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
-    def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None):
+    def step(self, s_tm1, xs_h, uh, y_tm1, btg_xs_h=None, btg_uh=None, btg_xs_mask=None, xs_mask=None, y_mask=None, attend_assist=None):
         if not isinstance(y_tm1, tc.autograd.variable.Variable):
             if isinstance(y_tm1, int): y_tm1 = tc.Tensor([y_tm1]).long()
             elif isinstance(y_tm1, list): y_tm1 = tc.Tensor(y_tm1).long()
@@ -208,7 +207,7 @@ class Decoder(nn.Module):
 
         # (slen, batch_size), (batch_size, enc_hid_size)
         alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
-        s_t = self.gru(y_tm1, y_mask, s_tm1, attend)
+        s_t = self.gru(y_tm1, y_mask, s_tm1, attend, attend_assist=attend_assist)
 
         return attend, s_t, y_tm1, alpha_ij
 
@@ -242,22 +241,22 @@ class Decoder(nn.Module):
             else:
                 y_tm1 = ys_e[k]
 
-            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
-                                            xs_mask if xs_mask is not None else None,
-                                            ys_mask[k] if ys_mask is not None else None)
-
-            states.append(s_tm1)
-
             if isinstance(assist_states, Variable):
-                assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
                 # read
-                logit = self.step_out(s_tm1, y_tm1, attend, state_ctx=assist_ctx)
+                assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
+                attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+                                                xs_mask if xs_mask is not None else None,
+                                                ys_mask[k] if ys_mask is not None else None,
+                                                attend_assist=assist_ctx)
                 # write
-                assist_states = self.write_assist_state(logit, assist_states, assist_alpha)
+                assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
                 assist_states = assist_states * ys_mask[:, :, None]
             else:
-                logit = self.step_out(s_tm1, y_tm1, attend)
-
+                attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+                                                xs_mask if xs_mask is not None else None,
+                                                ys_mask[k] if ys_mask is not None else None)
+            states.append(s_tm1)
+            logit = self.step_out(s_tm1, y_tm1, attend)
             sent_logit.append(logit)
 
             if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
@@ -287,26 +286,23 @@ class Decoder(nn.Module):
 
         return results
 
-    def write_assist_state(self, logit, assist_states, assist_alpha):
+    def write_assist_state(self, s_tm1, assist_states, assist_alpha):
         '''
 
-        :param logit: B, H
+        :param s_tm1: B, H
         :param assist_states: B, H
         :param assist_alpha: S, B, 1
         :return:
         '''
-        ft, ut = F.tanh(self.write_f(logit)), F.tanh(self.write_u(logit))
+        ft, ut = F.tanh(self.write_f(s_tm1)), F.tanh(self.write_u(s_tm1))
         alpha_ij = assist_alpha[:, :, None]
 
         return assist_states * (1. - alpha_ij * ft[None, :, :]) + alpha_ij * ut[None, :, :]
 
-    def step_out(self, s, y, c, state_ctx=None):
+    def step_out(self, s, y, c):
 
         # (max_tlen_batch - 1, batch_size, dec_hid_size)
-        if isinstance(state_ctx, Variable):
-            logit = self.ls(s) + self.ly(y) + self.lc(c) + self.ls_assist_ctx(state_ctx)
-        else:
-            logit = self.ls(s) + self.ly(y) + self.lc(c)
+        logit = self.ls(s) + self.ly(y) + self.lc(c)
         # (max_tlen_batch - 1, batch_size, out_size)
 
         if logit.dim() == 2:    # for decoding
