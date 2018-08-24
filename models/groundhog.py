@@ -113,6 +113,7 @@ class Encoder(nn.Module):
         f = lambda name: str_cat(prefix, name)  # return 'Encoder_' + parameters name
 
         self.src_lookup_table = nn.Embedding(src_vocab_size, wargs.src_wemb_size, padding_idx=PAD)
+        self.batch_norm = nn.BatchNorm1d(wargs.src_wemb_size)
 
         self.forw_gru = GRU(input_size, output_size, with_ln=with_ln, prefix=f('Forw'))
         self.back_gru = GRU(input_size, output_size, with_ln=with_ln, prefix=f('Back'))
@@ -120,7 +121,7 @@ class Encoder(nn.Module):
     def forward(self, xs, xs_mask=None, h0=None):
 
         max_L, b_size = xs.size(0), xs.size(1)
-        xs_e = xs if xs.dim() == 3 else self.src_lookup_table(xs)
+        xs_e = xs if xs.dim() == 3 else self.batch_norm(self.src_lookup_table(xs).permute(1, 2, 0).contiguous()).permute(2, 0, 1).contiguous()
 
         right = []
         h = h0 if h0 else Variable(tc.zeros(b_size, self.output_size), requires_grad=False)
@@ -181,6 +182,7 @@ class Decoder(nn.Module):
         self.assist_attention = Attention(wargs.dec_hid_size, wargs.align_size)
         self.assist_attention_w = nn.Linear(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
+        self.batch_norm = nn.BatchNorm1d(wargs.trg_wemb_size)
         self.tanh = nn.Tanh()
         self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=2*wargs.enc_hid_size)
 
@@ -217,7 +219,7 @@ class Decoder(nn.Module):
         y_Lm1, b_size = ys.size(0), ys.size(1)
         if isAtt is True: attends = []
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
-        ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
+        ys_e = ys if ys.dim() == 3 else self.batch_norm(self.trg_lookup_table(ys).permute(1, 2, 0).contiguous()).permute(2, 0, 1).contiguous()
         sent_logit, states, y_tm1_model = [], [], ys_e[0]
         for k in range(y_Lm1):
 
@@ -249,8 +251,8 @@ class Decoder(nn.Module):
                                                 ys_mask[k] if ys_mask is not None else None,
                                                 attend_assist=assist_ctx)
                 # write
-                assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
-                assist_states = assist_states * ys_mask[:, :, None]
+                # assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
+                # assist_states = assist_states * ys_mask[:, :, None]
             else:
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
