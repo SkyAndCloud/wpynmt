@@ -664,7 +664,7 @@ def grad_checker(model, _checks=None):
         if numpy.isnan(tmp_grad).any(): # we check gradient here for vanishing Gradient
             #pdb.set_trace()
             wlog("grad contains 'nan' | {}".format(n))
-            wlog("grad p contains 'nan' | {}".format(p))
+            wargs.has_nan = True
             #wlog("gradient\n{}".format(tmp_grad))
             _grad_nan = True
         if n == 'decoder.l_f1_0.weight' or n == 's_init.weight' or n=='decoder.l_f1_1.weight' \

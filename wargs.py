@@ -283,3 +283,6 @@ d_inner_hid=1024
 n_layers=1
 n_head=8
 warmup_steps=8000
+
+# DEBUG
+has_nan=False
