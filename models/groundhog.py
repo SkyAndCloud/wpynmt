@@ -163,6 +163,8 @@ class Attention(nn.Module):
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
+        if wargs.has_nan:
+            pdb.set_trace()
         e_ij = e_ij / e_ij.sum(0)[None, :]
 
         # weighted sum of the h_j: (b, enc_hid_size)
@@ -244,7 +246,6 @@ class Decoder(nn.Module):
 
             if isinstance(assist_states, Variable):
                 # read
-                pdb.set_trace()
                 assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
