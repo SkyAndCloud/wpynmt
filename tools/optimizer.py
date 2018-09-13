@@ -58,6 +58,7 @@ class Optim(object):
             self.optimizer = opt.Adagrad(self.params, lr=self.learning_rate)
         elif self.opt_mode == 'adadelta':
             wlog('Adadelta ... lr: {}, rho: {}'.format(self.learning_rate, wargs.rho))
+            #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=wargs.rho, weight_decay=1)
             self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=wargs.rho)
             #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=0.95, eps=10e-06)
             #self.optimizer = opt.Adadelta(self.params, lr=self.learning_rate, rho=0.95, weight_decay=10e-5)
@@ -119,4 +120,3 @@ class Optim(object):
            [torch.FloatTensor of size 3x4]],
           'weight_decay': 0}]
         '''
-

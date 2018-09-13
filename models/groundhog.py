@@ -2,6 +2,7 @@ import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
 
 import wargs
 from gru import GRU
@@ -21,8 +22,7 @@ class NMT(nn.Module):
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
-        self.right_decoder = Decoder(trg_vocab_size,
-                classifier=self.decoder.classifier)
+        self.right_decoder = Decoder(trg_vocab_size, classifier=self.decoder.classifier)
 
     def init_state(self, h0_left):
 
@@ -159,13 +159,19 @@ class Attention(nn.Module):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
-        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2).exp()
+        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
+        # 1, b
+        e_ij_mean = e_ij.mean(0, keepdim=True)
+        e_ij_std = e_ij.std(0, keepdim=True)
+        e_ij = ((e_ij - e_ij_mean) / e_ij_std).exp()
+        if np.isnan(e_ij.data.cpu().numpy()).any():
+            print '[ERROR 1] e_ij contains nan'
         if xs_mask is not None: e_ij = e_ij * xs_mask
 
         # probability in each column: (slen, b)
-        if wargs.has_nan:
-            pdb.set_trace()
         e_ij = e_ij / e_ij.sum(0)[None, :]
+        if np.isnan(e_ij.data.cpu().numpy()).any():
+            print '[ERROR 2] e_ij contains nan'
 
         # weighted sum of the h_j: (b, enc_hid_size)
         attend = (e_ij[:, :, None] * xs_h).sum(0)
@@ -174,7 +180,7 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, trg_vocab_size, max_out=True, classifier=None):
+    def __init__(self, trg_vocab_size, max_out=True, classifier=None, with_ln=False):
 
         super(Decoder, self).__init__()
 
@@ -184,7 +190,7 @@ class Decoder(nn.Module):
         self.assist_attention_w = nn.Linear(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()
-        self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=2*wargs.enc_hid_size)
+        self.gru = GRU(wargs.trg_wemb_size, wargs.dec_hid_size, enc_hid_size=2*wargs.enc_hid_size, with_ln=with_ln)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
@@ -247,13 +253,14 @@ class Decoder(nn.Module):
             if isinstance(assist_states, Variable):
                 # read
                 assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
+                #assist_ctx = Variable(tc.ones(b_size, wargs.dec_hid_size).cuda())
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
                                                 ys_mask[k] if ys_mask is not None else None,
                                                 attend_assist=assist_ctx)
                 # write
-                # assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
-                # assist_states = assist_states * ys_mask[:, :, None]
+                assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
+                assist_states = assist_states * ys_mask[:, :, None]
             else:
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
@@ -297,7 +304,7 @@ class Decoder(nn.Module):
         :param assist_alpha: S, B, 1
         :return:
         '''
-        ft, ut = F.tanh(self.write_f(s_tm1)), F.tanh(self.write_u(s_tm1))
+        ft, ut = F.sigmoid(self.write_f(s_tm1)), F.sigmoid(self.write_u(s_tm1))
         alpha_ij = assist_alpha[:, :, None]
 
         return assist_states * (1. - alpha_ij * ft[None, :, :]) + alpha_ij * ut[None, :, :]

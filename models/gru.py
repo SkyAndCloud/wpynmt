@@ -75,6 +75,8 @@ class GRU(nn.Module):
             if self.enc_hid_size is not None:
                 self.ln4 = Layer_Norm(2 * hidden_size)
                 self.ln5 = Layer_Norm(hidden_size)
+                self.ln6 = Layer_Norm(2 * hidden_size)
+                self.ln7 = Layer_Norm(hidden_size)
 
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
@@ -111,7 +113,12 @@ class GRU(nn.Module):
             else:
                 a_rz_t, a_h_t = self.crz(attend), self.ch(attend)
                 a_rz_t, a_h_t = self.ln4(a_rz_t), self.ln5(a_h_t)
-                rz_t = x_rz_t + h_rz_tm1 + a_rz_t
+                if isinstance(attend_assist, Variable):
+                    a_rz_t_assist, a_h_t_assist = self.crz_assist(attend_assist), self.ch_assist(attend_assist)
+                    a_rz_t_assist, a_h_t_assist = self.ln6(a_rz_t_assist), self.ln7(a_h_t_assist)
+                    rz_t = x_rz_t + h_rz_tm1 + a_rz_t + a_rz_t_assist
+                else:
+                    rz_t = x_rz_t + h_rz_tm1 + a_rz_t
 
         assert rz_t.dim() == 2
         rz_t = self.sigmoid(rz_t)

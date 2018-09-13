@@ -171,7 +171,7 @@ if_fixed_sampling = False
 eval_valid_from = 500 if eval_small else 100000
 eval_valid_freq = 100 if eval_small else 20000
 
-save_one_model = True
+save_one_model = False
 start_epoch = 1
 
 model_prefix = dir_model + '/model'

@@ -235,7 +235,7 @@ class Nbs(object):
                         btg_xs_mask=btg_xs_mask, attend_assist=assist_ctx)
                 a_i, s_i, y_im1, alpha_ij = step_output[:4]
                 # write
-                # self.states = self.decoder.write_assist_state(s_i, self.states, assist_alpha)
+                self.states = self.decoder.write_assist_state(s_i, self.states, assist_alpha)
             else:
                 step_output = self.decoder.step(
                         s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
