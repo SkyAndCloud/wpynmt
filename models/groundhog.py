@@ -259,7 +259,7 @@ class Decoder(nn.Module):
                                                 ys_mask[k] if ys_mask is not None else None,
                                                 attend_assist=assist_ctx)
                 # write
-                assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
+                # assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
                 assist_states = assist_states * ys_mask[:, :, None]
             else:
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
