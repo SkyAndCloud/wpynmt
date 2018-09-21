@@ -19,14 +19,15 @@ class NMT(nn.Module):
 
         self.encoder = Encoder(src_vocab_size, wargs.src_wemb_size, wargs.enc_hid_size)
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
+        self.s_init_right_last = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = Decoder(trg_vocab_size)
         self.right_decoder = Decoder(trg_vocab_size, classifier=self.decoder.classifier)
 
-    def init_state(self, h0_left):
+    def init_state(self, h0_left, hn_right):
 
-        return self.tanh(self.s_init(h0_left))
+        return self.tanh(self.s_init(h0_left)), self.tanh(self.s_init_right_last(hn_right))
 
     def init(self, xs, xs_mask=None, test=True):
 
@@ -34,31 +35,31 @@ class NMT(nn.Module):
             if wargs.gpu_id and not xs.is_cuda: xs = xs.cuda()
             xs = Variable(xs, requires_grad=False, volatile=True)
 
-        x_s, h0_left = self.encoder(xs, xs_mask)
-        s0 = self.init_state(h0_left)
+        x_s, h0_left, hn_right = self.encoder(xs, xs_mask)
+        s0, s0_bd = self.init_state(h0_left, hn_right)
         uh = self.ha(x_s)
 
-        return s0, x_s, uh
+        return s0, s0_bd, x_s, uh
 
     def forward(self, srcs, trgs, srcs_m, trgs_m, isAtt=False, test=False,
                 ss_eps=1., oracles=None):
 
         # (max_slen_batch, batch_size, enc_hid_size)
-        s0, srcs, uh = self.init(srcs, srcs_m, False)
+        s0, s0_bd, srcs, uh = self.init(srcs, srcs_m, False)
         # reverse tgts
         reversed_tgts, tgts_mask_without_eos = self.reverse_batch_padded_seq(trgs, trgs_m)
-        left_result, left_dec_states = self.decoder(s0, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
+        left_result, left_dec_states = self.decoder(s0_bd, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
 
-        tgts_valid_length = tc.squeeze(tc.sum(tgts_mask_without_eos, dim=0), 0).data.cpu().numpy().astype(int) # B
-        seq_len, batch_size = tgts_mask_without_eos.size()
-        reversed_left_dec_states = tc.transpose(left_dec_states, 0, 1) # B,S,H
-        temp = []
-        for s in xrange(batch_size):
-            idx = Variable(tc.cat((tc.arange(tgts_valid_length[s] - 2, -1, -1).long(), tc.arange(tgts_valid_length[s] - 1, seq_len, 1).long())).cuda())
-            temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
-        reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
+        #tgts_valid_length = tc.squeeze(tc.sum(tgts_mask_without_eos, dim=0), 0).data.cpu().numpy().astype(int) # B
+        #seq_len, batch_size = tgts_mask_without_eos.size()
+        #reversed_left_dec_states = tc.transpose(left_dec_states, 0, 1) # B,S,H
+        #temp = []
+        #for s in xrange(batch_size):
+        #    idx = Variable(tc.cat((tc.arange(tgts_valid_length[s] - 2, -1, -1).long(), tc.arange(tgts_valid_length[s] - 1, seq_len, 1).long())).cuda())
+        #    temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
+        #reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
 
-        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=reversed_left_dec_states)
+        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=left_dec_states)
         return left_result, right_result
 
     def reverse_batch_padded_seq(self, tgt, tgt_mask):
@@ -140,10 +141,10 @@ class Encoder(nn.Module):
         right = tc.stack(right, dim=0)
         left = tc.stack(left[::-1], dim=0)
         # (slen, batch_size, 2*output_size)
-        r1, r2 = tc.cat([right, left], -1), left[0]
+        r1, r2, r3 = tc.cat([right, left], -1), left[0], right[-1]
         del right, left, h
 
-        return r1, r2
+        return r1, r2, r3
 
 class Attention(nn.Module):
 
@@ -161,9 +162,10 @@ class Attention(nn.Module):
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
         e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
         # 1, b
-        e_ij_mean = e_ij.mean(0, keepdim=True)
-        e_ij_std = e_ij.std(0, keepdim=True)
-        e_ij = ((e_ij - e_ij_mean) / e_ij_std).exp()
+        #e_ij_mean = e_ij.mean(0, keepdim=True)
+        #e_ij_std = e_ij.std(0, keepdim=True)
+        #e_ij = ((e_ij - e_ij_mean) / e_ij_std).exp()
+        e_ij = e_ij.exp()
         if np.isnan(e_ij.data.cpu().numpy()).any():
             print '[ERROR 1] e_ij contains nan'
         if xs_mask is not None: e_ij = e_ij * xs_mask
@@ -260,7 +262,7 @@ class Decoder(nn.Module):
                                                 attend_assist=assist_ctx)
                 # write
                 # assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
-                assist_states = assist_states * ys_mask[:, :, None]
+                #assist_states = assist_states * ys_mask[:, :, None]
             else:
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,

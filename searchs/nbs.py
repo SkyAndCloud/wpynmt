@@ -14,7 +14,7 @@ import time
 class Nbs(object):
 
     def __init__(self, model, decoder, tvcb_i2w, k=10, ptv=None, noise=False,
-                 print_att=False, batch_sample=False):
+                 print_att=False, batch_sample=False, is_bd=False):
 
         if isinstance(model, tc.nn.DataParallel): self.model = model.module
         else: self.model = model
@@ -27,6 +27,7 @@ class Nbs(object):
         self.tvcb_i2w = tvcb_i2w
         self.print_att = print_att
         self.states=[]
+        self.is_bd = is_bd
 
         self.C = [0] * 4
         self.batch_sample = batch_sample
@@ -52,7 +53,8 @@ class Nbs(object):
 
         self.maxL = y_mask.size(0) if self.batch_sample is True else 2 * self.srcL
         # get initial state of decoder rnn and encoder context
-        self.s0, self.enc_src0, self.uh0 = self.model.init(x_LB, xs_mask=x_mask, test=True)
+        tmp_s0, tmp_s0_right_last, self.enc_src0, self.uh0 = self.model.init(x_LB, xs_mask=x_mask, test=True)
+        self.s0 = tmp_s0_right_last if self.is_bd else tmp_s0
         if wargs.dynamic_cyk_decoding is True:
             assert not self.batch_sample, 'unsupport batch sampling for cyk'
             xs_mask = Variable(tc.ones(self.srcL), requires_grad=False, volatile=True)

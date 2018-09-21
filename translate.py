@@ -48,7 +48,7 @@ class Translator(object):
         if self.search_mode == 0:
             self.greedy = Greedy(self.tvcb_i2w)
         elif self.search_mode == 1:
-            self.nbs = Nbs(model, model.decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
+            self.nbs = Nbs(model, model.decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att, is_bd=True)
             self.right_nbs = Nbs(model, model.right_decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
         elif self.search_mode == 2:
             self.wcp = Wcp(model, self.tvcb_i2w, k=self.k, print_att=print_att)
@@ -62,7 +62,7 @@ class Translator(object):
         elif self.search_mode == 1:
             batch_tran_cands = self.nbs.beam_search_trans(s)
             trans, loss, attent_matrix, states = batch_tran_cands[0][0] # first sent, best cand
-            states = states[::-1]
+            #states = states[::-1]
             right_batch_tran_cands = self.right_nbs.beam_search_trans(s, states=states)
         #elif self.search_mode == 2: (trans, ids), loss = self.wcp.cube_prune_trans(s)
         elif self.search_mode == 2:
