@@ -148,24 +148,27 @@ class Encoder(nn.Module):
 
 class Attention(nn.Module):
 
-    def __init__(self, dec_hid_size, align_size):
+    def __init__(self, dec_hid_size, align_size, scale=False):
 
         super(Attention, self).__init__()
         self.align_size = align_size
         self.sa = nn.Linear(dec_hid_size, self.align_size)
         self.tanh = nn.Tanh()
         self.a1 = nn.Linear(self.align_size, 1)
+        self.scale = scale
 
     def forward(self, s_tm1, xs_h, uh, xs_mask=None):
 
         d1, d2, d3 = uh.size()
         # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
         e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
-        # 1, b
-        #e_ij_mean = e_ij.mean(0, keepdim=True)
-        #e_ij_std = e_ij.std(0, keepdim=True)
-        #e_ij = ((e_ij - e_ij_mean) / e_ij_std).exp()
-        e_ij = e_ij.exp()
+        if self.scale:
+            # 1, b
+            e_ij_mean = e_ij.mean(0, keepdim=True)
+            e_ij_std = e_ij.std(0, keepdim=True)
+            e_ij = ((e_ij - e_ij_mean) / e_ij_std).exp()
+        else:
+            e_ij = e_ij.exp()
         if np.isnan(e_ij.data.cpu().numpy()).any():
             print '[ERROR 1] e_ij contains nan'
         if xs_mask is not None: e_ij = e_ij * xs_mask
@@ -188,7 +191,7 @@ class Decoder(nn.Module):
 
         self.max_out = max_out
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
-        self.assist_attention = Attention(wargs.dec_hid_size, wargs.align_size)
+        self.assist_attention = Attention(wargs.dec_hid_size, wargs.align_size, True)
         self.assist_attention_w = nn.Linear(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()

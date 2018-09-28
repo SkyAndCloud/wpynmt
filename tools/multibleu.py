@@ -78,7 +78,10 @@ def multi_bleu(candidates, all_references, tokenize_fn=tokenize, maxn=4, char=Fa
     precisions = [(correct[n] / total[n]) if correct[n] else 0 for n in range(maxn)]
 
     if cand_tot_length < ref_closest_length:
-        brevity_penalty = exp(1 - ref_closest_length / cand_tot_length)
+        if cand_tot_length:
+            brevity_penalty = exp(1 - ref_closest_length / cand_tot_length)
+        else:
+            brevity_penalty = 1
     else:
         brevity_penalty = 1
     score = 100 * brevity_penalty * exp(

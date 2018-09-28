@@ -36,9 +36,9 @@ out_size = 512
 drop_rate = 0.5
 
 # Directory to save model, test output and validation output
-dir_model = 'wmodel'
-dir_valid = 'wvalid'
-dir_tests = 'wtests'
+dir_model = 'wmodel_27'
+dir_valid = 'wvalid_27'
+dir_tests = 'wtests_27'
 
 # Validation data
 val_shuffle = True
@@ -178,7 +178,7 @@ model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
 #pre_train = './wmodel/model.pt'
-pre_train = None
+pre_train = 'wmodel_25/model_e8_upd13930.pt'
 #pre_train = best_model
 fix_pre_params = False
 
