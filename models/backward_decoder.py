@@ -2,16 +2,53 @@ import torch as tc
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
 
 import wargs
 from gru import GRU
 from tools.utils import *
 from models.losser import *
-from models.rnnsearch import Attention
 
 import pdb
 
 EOS = 3
+
+class Attention(nn.Module):
+
+    def __init__(self, dec_hid_size, align_size, scale=False):
+
+        super(Attention, self).__init__()
+        self.align_size = align_size
+        self.sa = nn.Linear(dec_hid_size, self.align_size)
+        self.tanh = nn.Tanh()
+        self.a1 = nn.Linear(self.align_size, 1)
+        self.scale = scale
+
+    def forward(self, s_tm1, xs_h, uh, xs_mask=None):
+
+        d1, d2, d3 = uh.size()
+        # (b, dec_hid_size) -> (b, aln) -> (1, b, aln) -> (slen, b, aln) -> (slen, b)
+        e_ij = self.a1(self.tanh(self.sa(s_tm1)[None, :, :] + uh)).squeeze(2)
+        if self.scale:
+            # 1, b
+            e_ij_mean = e_ij.mean(0, keepdim=True)
+            e_ij_std = e_ij.std(0, keepdim=True)
+            e_ij = ((e_ij - e_ij_mean) / e_ij_std).exp()
+        else:
+            e_ij = e_ij.exp()
+        if np.isnan(e_ij.data.cpu().numpy()).any():
+            print '[ERROR 1] e_ij contains nan'
+        if xs_mask is not None: e_ij = e_ij * xs_mask
+
+        # probability in each column: (slen, b)
+        e_ij = e_ij / e_ij.sum(0)[None, :]
+        if np.isnan(e_ij.data.cpu().numpy()).any():
+            print '[ERROR 2] e_ij contains nan'
+
+        # weighted sum of the h_j: (b, enc_hid_size)
+        attend = (e_ij[:, :, None] * xs_h).sum(0)
+
+        return e_ij, attend
 
 class BackwardDecoder(nn.Module):
 
@@ -67,7 +104,7 @@ class BackwardDecoder(nn.Module):
         mask_next_time = [False] * b_size
         tlen_batch_m = []
 
-        for k in range(wargs.max_seq_len):
+        for k in range(wargs.max_seq_len + 1):
             if isinstance(assist_states, Variable):
                 # read
                 assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
@@ -84,8 +121,9 @@ class BackwardDecoder(nn.Module):
                                                 xs_mask if xs_mask is not None else None,
                                                 ys_mask)
             states.append(s_tm1)
-            sent_logit.append(logit)
+            tlen_batch_m.append(y_mask)
             logit = self.step_out(s_tm1, y_tm1, attend, assist_c=assist_ctx if isinstance(assist_states, Variable) else None)
+            sent_logit.append(logit)
             prob = self.classifier.softmax(self.classifier.get_a(logit))
             next_ces = tc.max(prob, 1)[1]
             y_tm1 = self.trg_lookup_table(next_ces)
@@ -134,7 +172,7 @@ class BackwardDecoder(nn.Module):
         states = states * m[:,:,None]
 
         #del s, c
-        results = (logit, states, tc.stack(attends, 0)) if isAtt is True else (logit, states)
+        results = (logit, states, tc.stack(attends, 0)) if isAtt is True else (logit, states, m)
 
         return results
 

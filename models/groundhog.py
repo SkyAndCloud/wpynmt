@@ -49,7 +49,7 @@ class NMT(nn.Module):
         s0, s0_bd, srcs, uh = self.init(srcs, srcs_m, False)
         # reverse tgts
         reversed_tgts, tgts_mask_without_eos = self.reverse_batch_padded_seq(trgs, trgs_m)
-        left_result, left_dec_states = self.decoder(s0_bd, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
+        left_result, left_dec_states, left_dec_states_m = self.decoder(s0_bd, srcs, reversed_tgts, uh, srcs_m, tgts_mask_without_eos)
 
         #tgts_valid_length = tc.squeeze(tc.sum(tgts_mask_without_eos, dim=0), 0).data.cpu().numpy().astype(int) # B
         #seq_len, batch_size = tgts_mask_without_eos.size()
@@ -60,7 +60,7 @@ class NMT(nn.Module):
         #    temp.append(reversed_left_dec_states[s].index_select(0, idx)) # S,H
         #reversed_left_dec_states = tc.transpose(tc.stack(temp, 0), 0, 1) # S,B,H
 
-        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=left_dec_states)
+        right_result, _ = self.right_decoder(s0, srcs, trgs, uh, srcs_m, tgts_mask_without_eos, assist_states=left_dec_states, assist_states_m=left_dec_states_m)
         return left_result, right_result
 
     def reverse_batch_padded_seq(self, tgt, tgt_mask):
@@ -226,7 +226,7 @@ class Decoder(nn.Module):
 
         return attend, s_t, y_tm1, alpha_ij
 
-    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None, assist_states=None):
+    def forward(self, s_tm1, xs_h, ys, uh, xs_mask=None, ys_mask=None, isAtt=False, ss_eps=1., oracles=None, assist_states=None, assist_states_m=None):
 
         tlen_batch_s, tlen_batch_c = [], []
         y_Lm1, b_size = ys.size(0), ys.size(1)
@@ -258,7 +258,7 @@ class Decoder(nn.Module):
 
             if isinstance(assist_states, Variable):
                 # read
-                assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
+                assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), assist_states_m)
                 #assist_ctx = Variable(tc.ones(b_size, wargs.dec_hid_size).cuda())
                 attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
