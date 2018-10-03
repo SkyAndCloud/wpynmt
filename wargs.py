@@ -36,16 +36,16 @@ out_size = 512
 drop_rate = 0.5
 
 # Directory to save model, test output and validation output
-dir_model = 'wmodel_27'
-dir_valid = 'wvalid_27'
-dir_tests = 'wtests_27'
+dir_model = 'wmodel_30'
+dir_valid = 'wvalid_30'
+dir_tests = 'wtests_30'
 
 # Validation data
 val_shuffle = True
 # Training data
 train_shuffle = True
 batch_size = 80
-sort_k_batches = 20
+sort_k_batches = 25
 
 # Data path
 dir_data = 'data/'

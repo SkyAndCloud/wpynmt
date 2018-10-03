@@ -58,7 +58,7 @@ class BackwardDecoder(nn.Module):
 
         self.max_out = max_out
         self.attention = Attention(wargs.dec_hid_size, wargs.align_size)
-        self.assist_attention = Attention(wargs.dec_hid_size, wargs.align_size, True)
+        self.assist_attention = Attention(wargs.dec_hid_size, wargs.align_size)
         self.assist_attention_w = nn.Linear(wargs.dec_hid_size, wargs.align_size)
         self.trg_lookup_table = nn.Embedding(trg_vocab_size, wargs.trg_wemb_size, padding_idx=PAD)
         self.tanh = nn.Tanh()

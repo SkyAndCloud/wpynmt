@@ -48,7 +48,7 @@ class Translator(object):
         if self.search_mode == 0:
             self.greedy = Greedy(self.tvcb_i2w)
         elif self.search_mode == 1:
-            self.nbs = Nbs(model, model.decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att, is_bd=True)
+            self.nbs = Nbs(model, model.decoder, self.tvcb_i2w, k=1, noise=self.noise, print_att=print_att, is_bd=True)
             self.right_nbs = Nbs(model, model.right_decoder, self.tvcb_i2w, k=self.k, noise=self.noise, print_att=print_att)
         elif self.search_mode == 2:
             self.wcp = Wcp(model, self.tvcb_i2w, k=self.k, print_att=print_att)
