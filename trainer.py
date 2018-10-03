@@ -13,6 +13,7 @@ from torch.autograd import Variable
 
 import wargs
 from tools.utils import *
+from models import losser
 import tools.crash_on_ipy
 from translate import Translator
 
@@ -143,7 +144,7 @@ class Trainer(object):
                 #batch_loss = batch_loss.data[0]
                 #batch_correct_num = batch_correct_num.data[0]
 
-                left_batch_loss, right_batch_loss, batch_correct_num, batch_z = self.classifier.snip_back_prop(left_outputs, right_outputs, gold, gold_mask, wargs.snip_size)
+                left_batch_loss, right_batch_loss, batch_correct_num, batch_z = losser.loss_backward(left_outputs, right_outputs, gold, gold_mask, wargs.snip_size)
                 self.optim.step()
                 grad_checker(self.model, _checks)
 
