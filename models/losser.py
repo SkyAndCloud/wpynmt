@@ -95,81 +95,6 @@ class Classifier(nn.Module):
         # total loss,  correct count in one batch
         return nll, pred_correct, batch_Z
 
-    #   outputs: the predict outputs from the model.
-    #   gold: correct target sentences in current batch
-    def snip_back_prop(self, left_outputs, right_outputs, gold, gold_mask, shard_size=100):
-
-        """
-        Compute the loss in shards for efficiency.
-        """
-        left_batch_loss, right_batch_loss, batch_correct_num, batch_Z = 0, 0, 0, 0
-        cur_batch_count = left_outputs.size(1)
-
-        reversed_gold = self.reverse_batch_padded_seq(gold)
-        if reversed_gold.size(0) < left_outputs.size(0):
-            reversed_gold_tmp = tc.LongTensor([[3]]).expand([left_outputs.size(0), left_outputs.size(1)])
-            reversed_gold_tmp[:reversed_gold.size(0), :] = reversed_gold.data
-            reversed_gold_mask = tc.Tensor([[0]]).expand([left_outputs.size(0), left_outputs.size(1)])
-            reversed_gold_mask[:reversed_gold.size(0), :] = gold_mask.data
-            reversed_gold_mask = Variable(reversed_gold_mask.contiguous().cuda())
-            reversed_gold = Variable(reversed_gold_tmp.contiguous().cuda())
-        elif reversed_gold.size(0) > left_outputs.size(0):
-            reversed_gold = reversed_gold[:left_outputs.size(0),:]
-            reversed_gold_mask = gold_mask[:left_outputs.size(0),:]
-        else:
-            reversed_gold_mask = gold_mask
-
-        shard_state = {"left_feed": left_outputs,
-                       "left_gold": reversed_gold,
-                       "left_gold_mask": reversed_gold_mask,
-                       'right_gold_mask': gold_mask,
-                       "right_feed": right_outputs,
-                       "right_gold": gold}
-
-        for shard in shards(shard_state, shard_size):
-            try:
-                left_loss, left_pred_correct, left_batch_z = self(shard["left_feed"], shard["left_gold"], shard["left_gold_mask"])
-                right_loss, right_pred_correct, right_batch_z = self(shard["right_feed"], shard["right_gold"], shard["right_gold_mask"])
-            except Exception as e:
-                pdb.set_trace()
-
-            left_batch_loss += left_loss.data.clone()[0]
-            right_batch_loss += right_loss.data.clone()[0]
-
-            batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
-            batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
-            shard_loss = (1 - wargs.lambda_) * left_loss + wargs.lambda_ * right_loss
-            #shard_loss = left_loss
-            if wargs.has_nan:
-                print('[NaN] left loss: {}, right loss: {}'.format(left_loss, right_loss))
-            shard_loss.div(cur_batch_count).backward()
-
-        return left_batch_loss, right_batch_loss, batch_correct_num, batch_Z
-
-    def reverse_batch_padded_seq(self, tgt):
-        # S,B => B,S
-        tgt_t = tc.transpose(tgt, 0, 1)
-        tgt_t_np = tgt_t.data.cpu().numpy().copy()
-        batch_size, seq_len = tgt_t_np.shape
-
-        # a b c d e <eos> 0 0 0 => e d c b a <eos> 0 0 0
-        def reverse_seq(seq):
-            left = 0
-            right = seq_len - 1
-            while seq[right] != 3:
-                right -= 1
-            right -= 1
-            while left < right:
-                tmp = seq[right]
-                seq[right] = seq[left]
-                seq[left] = tmp
-                left += 1
-                right -= 1
-
-        for s in xrange(batch_size):
-            reverse_seq(tgt_t_np[s])
-        return Variable(tc.from_numpy(tgt_t_np.T).cuda())
-
 def filter_shard_state(state):
     for k, v in state.items():
         if v is not None:
@@ -221,3 +146,88 @@ def shards(state, shard_size, eval=False):
                      if isinstance(v, Variable) and v.grad is not None)
         inputs, grads = zip(*variables)
         tc.autograd.backward(inputs, grads)
+
+def reverse_batch_padded_seq(self, tgt):
+    # S,B => B,S
+    tgt_t = tc.transpose(tgt, 0, 1)
+    tgt_t_np = tgt_t.data.cpu().numpy().copy()
+    batch_size, seq_len = tgt_t_np.shape
+
+    # a b c d e <eos> 0 0 0 => e d c b a <eos> 0 0 0
+    def reverse_seq(seq):
+        left = 0
+        right = seq_len - 1
+        while seq[right] != 3:
+            right -= 1
+        right -= 1
+        while left < right:
+            tmp = seq[right]
+            seq[right] = seq[left]
+            seq[left] = tmp
+            left += 1
+            right -= 1
+
+    for s in xrange(batch_size):
+        reverse_seq(tgt_t_np[s])
+    return Variable(tc.from_numpy(tgt_t_np.T).cuda())
+
+def loss_backward(left_classifier, right_classifier, left_outputs, right_outputs, gold, gold_mask, shard_size=100):
+    left_batch_loss, right_batch_loss, batch_correct_num, batch_Z = 0, 0, 0, 0
+    cur_batch_count = left_outputs.size(1)
+
+    reversed_gold = reverse_batch_padded_seq(gold)
+
+    if reversed_gold.size(0) < left_outputs.size(0):
+        reversed_gold_tmp = tc.LongTensor([[3]]).expand([left_outputs.size(0), left_outputs.size(1)])
+        reversed_gold_tmp[:reversed_gold.size(0), :] = reversed_gold.data
+        reversed_gold_mask = tc.Tensor([[0]]).expand([left_outputs.size(0), left_outputs.size(1)])
+        reversed_gold_mask[:reversed_gold.size(0), :] = gold_mask.data
+        reversed_gold_mask = Variable(reversed_gold_mask.contiguous().cuda())
+        reversed_gold = Variable(reversed_gold_tmp.contiguous().cuda())
+    elif reversed_gold.size(0) > left_outputs.size(0):
+        reversed_gold = reversed_gold[:left_outputs.size(0), :]
+        reversed_gold_mask = gold_mask[:left_outputs.size(0), :]
+    else:
+        reversed_gold_mask = gold_mask
+
+    if reversed_gold.size(0) < left_outputs.size(0):
+        reversed_gold_tmp = tc.LongTensor([[3]]).expand([left_outputs.size(0), left_outputs.size(1)])
+        reversed_gold_tmp[:reversed_gold.size(0), :] = reversed_gold.data
+        reversed_gold_mask = tc.Tensor([[0]]).expand([left_outputs.size(0), left_outputs.size(1)])
+        reversed_gold_mask[:reversed_gold.size(0), :] = gold_mask.data
+        reversed_gold_mask = Variable(reversed_gold_mask.contiguous().cuda())
+        reversed_gold = Variable(reversed_gold_tmp.contiguous().cuda())
+    elif reversed_gold.size(0) > left_outputs.size(0):
+        reversed_gold = reversed_gold[:left_outputs.size(0), :]
+        reversed_gold_mask = gold_mask[:left_outputs.size(0), :]
+    else:
+        reversed_gold_mask = gold_mask
+
+    shard_state = {"left_feed": left_outputs,
+                   "left_gold": reversed_gold,
+                   "left_gold_mask": reversed_gold_mask,
+                   'right_gold_mask': gold_mask,
+                   "right_feed": right_outputs,
+                   "right_gold": gold}
+
+    for shard in shards(shard_state, shard_size):
+        try:
+            left_loss, left_pred_correct, left_batch_z = left_classifier(shard["left_feed"], shard["left_gold"],
+                                                              shard["left_gold_mask"])
+            right_loss, right_pred_correct, right_batch_z = right_classifier(shard["right_feed"], shard["right_gold"],
+                                                                 shard["right_gold_mask"])
+        except Exception as e:
+            pdb.set_trace()
+
+        left_batch_loss += left_loss.data.clone()[0]
+        right_batch_loss += right_loss.data.clone()[0]
+
+        batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
+        batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
+        shard_loss = (1 - wargs.lambda_) * left_loss + wargs.lambda_ * right_loss
+        # shard_loss = left_loss
+        if wargs.has_nan:
+            print('[NaN] left loss: {}, right loss: {}'.format(left_loss, right_loss))
+        shard_loss.div(cur_batch_count).backward()
+
+    return left_batch_loss, right_batch_loss, batch_correct_num, batch_Z

@@ -24,7 +24,7 @@ class NMT(nn.Module):
         self.tanh = nn.Tanh()
         self.ha = nn.Linear(2 * wargs.enc_hid_size, wargs.align_size)
         self.decoder = BackwardDecoder(trg_vocab_size)
-        self.right_decoder = Decoder(trg_vocab_size, classifier=self.decoder.classifier)
+        self.right_decoder = Decoder(trg_vocab_size)
 
     def init_state(self, h0_left, hn_right):
 
