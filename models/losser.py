@@ -147,7 +147,7 @@ def shards(state, shard_size, eval=False):
         inputs, grads = zip(*variables)
         tc.autograd.backward(inputs, grads)
 
-def reverse_batch_padded_seq(self, tgt):
+def reverse_batch_padded_seq(tgt):
     # S,B => B,S
     tgt_t = tc.transpose(tgt, 0, 1)
     tgt_t_np = tgt_t.data.cpu().numpy().copy()
@@ -190,19 +190,6 @@ def loss_backward(left_classifier, right_classifier, left_outputs, right_outputs
     else:
         reversed_gold_mask = gold_mask
 
-    if reversed_gold.size(0) < left_outputs.size(0):
-        reversed_gold_tmp = tc.LongTensor([[3]]).expand([left_outputs.size(0), left_outputs.size(1)])
-        reversed_gold_tmp[:reversed_gold.size(0), :] = reversed_gold.data
-        reversed_gold_mask = tc.Tensor([[0]]).expand([left_outputs.size(0), left_outputs.size(1)])
-        reversed_gold_mask[:reversed_gold.size(0), :] = gold_mask.data
-        reversed_gold_mask = Variable(reversed_gold_mask.contiguous().cuda())
-        reversed_gold = Variable(reversed_gold_tmp.contiguous().cuda())
-    elif reversed_gold.size(0) > left_outputs.size(0):
-        reversed_gold = reversed_gold[:left_outputs.size(0), :]
-        reversed_gold_mask = gold_mask[:left_outputs.size(0), :]
-    else:
-        reversed_gold_mask = gold_mask
-
     shard_state = {"left_feed": left_outputs,
                    "left_gold": reversed_gold,
                    "left_gold_mask": reversed_gold_mask,
@@ -224,8 +211,8 @@ def loss_backward(left_classifier, right_classifier, left_outputs, right_outputs
 
         batch_correct_num = batch_correct_num + left_pred_correct.data.clone()[0] + right_pred_correct.data.clone()[0]
         batch_Z = batch_Z + left_batch_z.data.clone()[0] + right_batch_z.data.clone()[0]
-        shard_loss = (1 - wargs.lambda_) * left_loss + wargs.lambda_ * right_loss
-        # shard_loss = left_loss
+        #shard_loss = (1 - wargs.lambda_) * left_loss + wargs.lambda_ * right_loss
+        shard_loss = right_loss
         if wargs.has_nan:
             print('[NaN] left loss: {}, right loss: {}'.format(left_loss, right_loss))
         shard_loss.div(cur_batch_count).backward()
