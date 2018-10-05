@@ -1,6 +1,8 @@
 import torch as tc
 from torch import cuda
 
+import pdb
+
 import wargs
 from tools.inputs import Input
 from tools.utils import init_dir, wlog, _load_model
@@ -128,22 +130,34 @@ def main():
         if len(_dict) == 4: model_dict, eid, bid, optim = _dict
         elif len(_dict) == 5:
             model_dict, class_dict, eid, bid, optim = _dict
+        # update pretained params other than right_decoder
+        current_model_dict = nmtModel.state_dict()
+        #pretrained_dict = {k: v for k, v in model_dict.items() if k in current_model_dict and 'right_decoder' not in k}
+        current_model_dict.update(model_dict)
+        nmtModel.load_state_dict(current_model_dict)
+        # freeze params other than right decoder
+        for p in nmtModel.encoder.parameters():
+            p.requires_grad = False
+        for p in nmtModel.decoder.parameters():
+            p.requires_grad = False
         for name, param in nmtModel.named_parameters():
-            if name in model_dict:
-                param.requires_grad = not wargs.fix_pre_params
-                param.data.copy_(model_dict[name])
-                wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
-            elif name.endswith('map_vocab.weight'):
-                if class_dict is not None:
-                    param.requires_grad = not wargs.fix_pre_params
-                    param.data.copy_(class_dict['map_vocab.weight'])
-                    wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
-            elif name.endswith('map_vocab.bias'):
-                if class_dict is not None:
-                    param.requires_grad = not wargs.fix_pre_params
-                    param.data.copy_(class_dict['map_vocab.bias'])
-                    wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
-            else: init_params(param, name, True)
+        #    if name in model_dict:
+        #        param.requires_grad = not wargs.fix_pre_params
+        #        param.data.copy_(model_dict[name])
+            if name.startswith('s_init_right_last') or name.startswith('ha'):
+                param.requires_grad = False
+            wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
+        #    elif name.endswith('map_vocab.weight'):
+        #        if class_dict is not None:
+        #            param.requires_grad = not wargs.fix_pre_params
+        #            param.data.copy_(class_dict['map_vocab.weight'])
+        #            wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
+        #    elif name.endswith('map_vocab.bias'):
+        #        if class_dict is not None:
+        #            param.requires_grad = not wargs.fix_pre_params
+        #            param.data.copy_(class_dict['map_vocab.bias'])
+        #            wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
+        #    else: init_params(param, name, True)
 
         wargs.start_epoch = eid + 1
 

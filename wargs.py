@@ -36,9 +36,9 @@ out_size = 512
 drop_rate = 0.5
 
 # Directory to save model, test output and validation output
-dir_model = 'wmodel_30'
-dir_valid = 'wvalid_30'
-dir_tests = 'wtests_30'
+dir_model = 'wmodel_31'
+dir_valid = 'wvalid_31'
+dir_tests = 'wtests_31'
 
 # Validation data
 val_shuffle = True
@@ -269,7 +269,7 @@ sampling = 'length_limit'     # truncation, length_limit, gumbeling
 #tests_prefix = None
 #dec_gpu_id = [1]
 #dec_gpu_id = None
-gpu_id = [0]
+gpu_id = [2]
 #gpu_id = None
 
 # Transfomer
