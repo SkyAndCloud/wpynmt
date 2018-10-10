@@ -201,8 +201,8 @@ beta_cover_penalty = 0.
 Starting learning rate. If adagrad/adadelta/adam is used, then this is the global learning rate.
 Recommended settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.001
 '''
-opt_mode = 'adadelta'
-learning_rate = 1
+opt_mode = 'rmsprop'
+learning_rate = 5e-4
 rho = 0.95
 
 #opt_mode = 'adam'

@@ -235,27 +235,7 @@ class Decoder(nn.Module):
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         sent_logit, states, y_tm1_model = [], [], ys_e[0]
         for k in range(y_Lm1):
-
-            if wargs.ss_type is not None and ss_eps < 1. and (wargs.greed_sampling or wargs.bleu_sampling):
-                if wargs.greed_sampling is True:
-                    if oracles is not None:     # joint word and sentence level
-                        _seed = tc.Tensor(b_size, 1).bernoulli_()
-                        _seed = Variable(_seed, requires_grad=False)
-                        if wargs.gpu_id: _seed = _seed.cuda()
-                        y_tm1_oracle = y_tm1_model * _seed + oracles[k] * (1. - _seed)
-                    else:
-                        y_tm1_oracle = y_tm1_model  # word-level oracle (w/o w/ noise)
-                else:
-                    y_tm1_oracle = oracles[k]   # sentence-level oracle
-
-                _g = ss_eps * tc.ones(b_size, 1)
-                _g = tc.bernoulli(_g)   # pick gold with the probability of ss_eps
-                if wargs.gpu_id: _g = _g.cuda()
-                _g = Variable(_g, requires_grad=False)
-                y_tm1 = ys_e[k] * _g + y_tm1_oracle * (1. - _g)
-            else:
-                y_tm1 = ys_e[k]
-
+            y_tm1 = ys_e[k]
             if isinstance(assist_states, Variable):
                 # read
                 assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), assist_states_m)
@@ -267,24 +247,12 @@ class Decoder(nn.Module):
                 # write
                 # assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
                 #assist_states = assist_states * ys_mask[:, :, None]
-            else:
-                attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
-                                                xs_mask if xs_mask is not None else None,
-                                                ys_mask[k] if ys_mask is not None else None)
             states.append(s_tm1)
             logit = self.step_out(s_tm1, y_tm1, attend, assist_c=assist_ctx if isinstance(assist_states, Variable) else None)
             sent_logit.append(logit)
 
-            if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
-                #logit = self.map_vocab(logit)
-                logit = self.classifier.get_a(logit, noise=wargs.greed_gumbel_noise)
-                y_tm1_model = logit.max(-1)[1]
-                y_tm1_model = self.trg_lookup_table(y_tm1_model)
-
             #tlen_batch_c.append(attend)
             #tlen_batch_s.append(s_tm1)
-
-            if isAtt is True: attends.append(alpha_ij)
 
         #s = tc.stack(tlen_batch_s, dim=0)
         #c = tc.stack(tlen_batch_c, dim=0)

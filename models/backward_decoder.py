@@ -104,26 +104,14 @@ class BackwardDecoder(nn.Module):
         mask_next_time = [False] * b_size
         tlen_batch_m = []
 
+        # use greedy search to generate states
         for k in range(wargs.max_seq_len + 1):
-            if isinstance(assist_states, Variable):
-                # read
-                assist_alpha, assist_ctx = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), ys_mask)
-                #assist_ctx = Variable(tc.ones(b_size, wargs.dec_hid_size).cuda())
-                attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
-                                                xs_mask if xs_mask is not None else None,
-                                                ys_mask,
-                                                attend_assist=assist_ctx)
-                # write
-                # assist_states = self.write_assist_state(s_tm1, assist_states, assist_alpha)
-                #assist_states = assist_states * ys_mask[:, :, None]
-            else:
-                attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
                                                 ys_mask)
             states.append(s_tm1)
             tlen_batch_m.append(y_mask)
-            logit = self.step_out(s_tm1, y_tm1, attend, assist_c=assist_ctx if isinstance(assist_states, Variable) else None)
-            sent_logit.append(logit)
+            logit = self.step_out(s_tm1, y_tm1, attend)
             prob = self.classifier.softmax(self.classifier.get_a(logit))
             next_ces = tc.max(prob, 1)[1]
             y_tm1 = self.trg_lookup_table(next_ces)
@@ -149,30 +137,22 @@ class BackwardDecoder(nn.Module):
             if reach_end == True:
                 break
 
-            if wargs.ss_type is not None and ss_eps < 1. and wargs.greed_sampling is True:
-                #logit = self.map_vocab(logit)
-                logit = self.classifier.get_a(logit, noise=wargs.greed_gumbel_noise)
-                y_tm1_model = logit.max(-1)[1]
-                y_tm1_model = self.trg_lookup_table(y_tm1_model)
+        # use teacher forcing to calculate loss
+        for k in range(y_Lm1):
+            y_tm1 = ys_e[k]
+            attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
+                                                xs_mask if xs_mask is not None else None,
+                                                ys_mask[k] if ys_mask is not None else None)
+            logit = self.step_out(s_tm1, y_tm1, attend)
+            sent_logit.append(logit)
 
-            #tlen_batch_c.append(attend)
-            #tlen_batch_s.append(s_tm1)
-
-
-        #s = tc.stack(tlen_batch_s, dim=0)
-        #c = tc.stack(tlen_batch_c, dim=0)
-        #del tlen_batch_s, tlen_batch_c
-
-        #logit = self.step_out(s, ys_e, c)
-        #if ys_mask is not None: logit = logit * ys_mask[:, :, None]  # !!!!
         m = tc.stack(tlen_batch_m, dim=0)
-        logit = tc.stack(sent_logit, dim=0)
-        logit = logit * m[:, :, None]  # !!!!
         states = tc.stack(states, dim=0)
         states = states * m[:,:,None]
-
+        logits = tc.stack(sent_logit, dim=0)
+        logits = logits * ys_mask[:, :, None]
         #del s, c
-        results = (logit, states, tc.stack(attends, 0)) if isAtt is True else (logit, states, m)
+        results = (logits, states, tc.stack(attends, 0)) if isAtt is True else (logits, states, m)
 
         return results
 

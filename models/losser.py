@@ -177,22 +177,22 @@ def loss_backward(left_classifier, right_classifier, left_outputs, right_outputs
 
     reversed_gold = reverse_batch_padded_seq(gold)
 
-    if reversed_gold.size(0) < left_outputs.size(0):
-        reversed_gold_tmp = tc.LongTensor([[3]]).expand([left_outputs.size(0), left_outputs.size(1)])
-        reversed_gold_tmp[:reversed_gold.size(0), :] = reversed_gold.data
-        reversed_gold_mask = tc.Tensor([[0]]).expand([left_outputs.size(0), left_outputs.size(1)])
-        reversed_gold_mask[:reversed_gold.size(0), :] = gold_mask.data
-        reversed_gold_mask = Variable(reversed_gold_mask.contiguous().cuda())
-        reversed_gold = Variable(reversed_gold_tmp.contiguous().cuda())
-    elif reversed_gold.size(0) > left_outputs.size(0):
-        reversed_gold = reversed_gold[:left_outputs.size(0), :]
-        reversed_gold_mask = gold_mask[:left_outputs.size(0), :]
-    else:
-        reversed_gold_mask = gold_mask
+    # if reversed_gold.size(0) < left_outputs.size(0):
+    #     reversed_gold_tmp = tc.LongTensor([[3]]).expand([left_outputs.size(0), left_outputs.size(1)])
+    #     reversed_gold_tmp[:reversed_gold.size(0), :] = reversed_gold.data
+    #     reversed_gold_mask = tc.Tensor([[0]]).expand([left_outputs.size(0), left_outputs.size(1)])
+    #     reversed_gold_mask[:reversed_gold.size(0), :] = gold_mask.data
+    #     reversed_gold_mask = Variable(reversed_gold_mask.contiguous().cuda())
+    #     reversed_gold = Variable(reversed_gold_tmp.contiguous().cuda())
+    # elif reversed_gold.size(0) > left_outputs.size(0):
+    #     reversed_gold = reversed_gold[:left_outputs.size(0), :]
+    #     reversed_gold_mask = gold_mask[:left_outputs.size(0), :]
+    # else:
+    #     reversed_gold_mask = gold_mask
 
     shard_state = {"left_feed": left_outputs,
                    "left_gold": reversed_gold,
-                   "left_gold_mask": reversed_gold_mask,
+                   "left_gold_mask": gold_mask,
                    'right_gold_mask': gold_mask,
                    "right_feed": right_outputs,
                    "right_gold": gold}
