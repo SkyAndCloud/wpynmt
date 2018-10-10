@@ -67,8 +67,8 @@ class Optim(object):
             self.optimizer = opt.Adam(self.params, lr=self.learning_rate,
                                       betas=[wargs.beta_1, wargs.beta_2], eps=10e-9)
         elif self.opt_mode == 'rmsprop':
-            wlog('RMSprop ... lr: {}, rho: {}, epsilon: {}'.format(self.learning_rate, 0.95, 1e-4));
-            self.optimizer = opt.RMSprop(self.params, lr=self.learning_rate, alpha=0.95, eps=1e-4);
+            wlog('RMSprop ... lr: {}, rho: {}, epsilon: {}'.format(self.learning_rate, 0.99, 1e-8));
+            self.optimizer = opt.RMSprop(self.params, lr=self.learning_rate, alpha=0.99, eps=1e-8);
         else:
             wlog('Do not support this opt_mode {}'.format(self.opt_mode))
 
