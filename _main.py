@@ -136,16 +136,16 @@ def main():
         current_model_dict.update(model_dict)
         nmtModel.load_state_dict(current_model_dict)
         # freeze params other than right decoder
-        for p in nmtModel.encoder.parameters():
-            p.requires_grad = False
-        for p in nmtModel.decoder.parameters():
-            p.requires_grad = False
+        # for p in nmtModel.encoder.parameters():
+        #     p.requires_grad = False
+        # for p in nmtModel.decoder.parameters():
+        #     p.requires_grad = False
         for name, param in nmtModel.named_parameters():
         #    if name in model_dict:
         #        param.requires_grad = not wargs.fix_pre_params
         #        param.data.copy_(model_dict[name])
-            if name.startswith('s_init_right_last') or name.startswith('ha'):
-                param.requires_grad = False
+        #     if name.startswith('s_init_right_last') or name.startswith('ha'):
+        #         param.requires_grad = False
             wlog('{:7} -> grad {}\t{}'.format('Model', param.requires_grad, name))
         #    elif name.endswith('map_vocab.weight'):
         #        if class_dict is not None:

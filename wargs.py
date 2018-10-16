@@ -201,8 +201,8 @@ beta_cover_penalty = 0.
 Starting learning rate. If adagrad/adadelta/adam is used, then this is the global learning rate.
 Recommended settings: sgd = 1, adagrad = 0.1, adadelta = 1, adam = 0.001
 '''
-opt_mode = 'rmsprop'
-learning_rate = 5e-4
+opt_mode = 'adadelta'
+learning_rate = 1
 rho = 0.95
 
 #opt_mode = 'adam'
@@ -233,7 +233,7 @@ dec_rnn_type = 'sru'    # rnn, gru, lstm, sru
 dec_layer_cnt = 4
 
 # 0: groundhog, 1: rnnsearch, 2: ia, 3: ran, 4: rn, 5: sru, 6: cyknet
-model = 0
+model = 1
 
 # convolutional layer
 #fltr_windows = [1, 3, 5]   # windows size

@@ -231,21 +231,16 @@ class Nbs(object):
             # logit = self.decoder.logit(s_i)
             if isinstance(self.states, Variable):
                 # read
-                assist_alpha, assist_ctx = self.decoder.assist_attention(s_i, self.states, self.decoder.assist_attention_w(self.states))
-                step_output = self.decoder.step(
-                        s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
-                        btg_xs_mask=btg_xs_mask, attend_assist=assist_ctx)
+                step_output = self.decoder.step(s_im1, enc_src, uh, y_im1, assist_states=self.states)
                 a_i, s_i, y_im1, alpha_ij = step_output[:4]
                 # write
                 #self.states = self.decoder.write_assist_state(s_i, self.states, assist_alpha)
             else:
-                step_output = self.decoder.step(
-                        s_im1, enc_src, uh, y_im1, btg_xs_h=btg_xs_h, btg_uh=btg_uh,
-                        btg_xs_mask=btg_xs_mask)
+                step_output = self.decoder.step(s_im1, enc_src, uh, y_im1)
                 a_i, s_i, y_im1, alpha_ij = step_output[:4]
 
             self.C[2] += 1
-            logit = self.decoder.step_out(s_i, y_im1, a_i, assist_c=assist_ctx if isinstance(self.states, Variable) else None)
+            logit = self.decoder.step_out(s_i, y_im1, a_i)
             self.C[3] += 1
 
             if wargs.dynamic_cyk_decoding is True:
