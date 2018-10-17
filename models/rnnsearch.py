@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+import pdb
+
 import wargs
 from gru import GRU
 from tools.utils import *
@@ -19,7 +21,7 @@ class NMT(nn.Module):
         self.s_init = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.s_init_right_last = nn.Linear(wargs.enc_hid_size, wargs.dec_hid_size)
         self.tanh = nn.Tanh()
-        self.ha = nn.Linear(wargs.enc_hid_size, wargs.align_size)
+        self.ha = nn.Linear(wargs.enc_hid_size*2, wargs.align_size)
         self.right_decoder = Decoder(trg_vocab_size)
         self.decoder = BackwardDecoder(trg_vocab_size)
 
@@ -165,7 +167,7 @@ class Decoder(nn.Module):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
         self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
-        self.gru2 = GRU(wargs.dec_hid_size * 2, wargs.dec_hid_size)
+        self.gru2 = GRU(wargs.dec_hid_size * 3, wargs.dec_hid_size)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
@@ -188,7 +190,10 @@ class Decoder(nn.Module):
 
         s_above = self.gru1(y_tm1, y_mask, s_tm1)
         alpha_ij, attend = self.attention(s_above, xs_h, uh, xs_mask)
-        assist_alpha, assist_context = self.assist_attention(s_above, assist_states, self.assist_attention_w(assist_states), assist_states_m)
+        if isinstance(assist_states, Variable):
+            assist_alpha, assist_context = self.assist_attention(s_above, assist_states, self.assist_attention_w(assist_states), assist_states_m)
+        else:
+            assist_alpha, assist_context = tc.zeros(wargs.max_seq_len, wargs.dec_hid_size), tc.zeros_like(s_tm1)
         context = tc.cat([attend, assist_context], -1)
         s_t = self.gru2(context, y_mask, s_above)
 

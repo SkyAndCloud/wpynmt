@@ -97,15 +97,15 @@ class BackwardDecoder(nn.Module):
         # (max_tlen_batch - 1, batch_size, trg_wemb_size)
         ys_e = ys if ys.dim() == 3 else self.trg_lookup_table(ys)
         sent_logit, states, y_tm1 = [], [], ys_e[0]
+
+        # use greedy search to generate states
         y_mask = Variable(tc.FloatTensor([1] * b_size).cuda())
         mask_next_time = [False] * b_size
         tlen_batch_m = []
-
-        # use greedy search to generate states
         for k in range(wargs.max_seq_len + 1):
             attend, s_tm1, _, _ = self.step(s_tm1, xs_h, uh, y_tm1,
                                                 xs_mask if xs_mask is not None else None,
-                                                ys_mask)
+                                                y_mask)
             states.append(s_tm1)
             tlen_batch_m.append(y_mask)
             logit = self.step_out(s_tm1, y_tm1, attend)

@@ -221,7 +221,10 @@ class Decoder(nn.Module):
 
         # (slen, batch_size), (batch_size, enc_hid_size)
         alpha_ij, attend = self.attention(s_tm1, xs_h, uh, xs_mask)
-        assist_alpha, assist_context = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), assist_states_m)
+        if isinstance(assist_states, Variable):
+            assist_alpha, assist_context = self.assist_attention(s_tm1, assist_states, self.assist_attention_w(assist_states), assist_states_m)
+        else:
+            assist_alpha, assist_context = tc.zeros(wargs.max_seq_len, wargs.dec_hid_size), tc.zeros_like(s_tm1)
         context = tc.cat([attend, assist_context], -1)
         s_t = self.gru(y_tm1, y_mask, s_tm1, context)
 

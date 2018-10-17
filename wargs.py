@@ -164,8 +164,8 @@ elif dataset == 'L':
     #small = True
     #eval_small = True
 
-display_freq = 100 if small else 1000
-sampling_freq = 500 if small else 3000
+display_freq = 10 if small else 1000
+sampling_freq = 30 if small else 3000
 sample_size = 5
 if_fixed_sampling = False
 eval_valid_from = 500 if eval_small else 100000
@@ -178,7 +178,7 @@ model_prefix = dir_model + '/model'
 best_model = dir_valid + '/best.model.pt' if dir_valid else 'best.model.pt'
 # pretrained model
 #pre_train = './wmodel/model.pt'
-pre_train = 'wmodel_25/model_e8_upd13930.pt'
+pre_train = None
 #pre_train = best_model
 fix_pre_params = False
 

@@ -48,12 +48,12 @@ class BackwardDecoder(nn.Module):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
         self.gru1 = GRU(wargs.trg_wemb_size, wargs.dec_hid_size)
-        self.gru2 = GRU(wargs.enc_hid_size, wargs.dec_hid_size)
+        self.gru2 = GRU(wargs.enc_hid_size*2, wargs.dec_hid_size)
 
         out_size = 2 * wargs.out_size if max_out else wargs.out_size
         self.ls = nn.Linear(wargs.dec_hid_size, out_size)
         self.ly = nn.Linear(wargs.trg_wemb_size, out_size)
-        self.lc = nn.Linear(wargs.enc_hid_size, out_size)
+        self.lc = nn.Linear(wargs.enc_hid_size*2, out_size)
         self.classifier = Classifier(wargs.out_size, trg_vocab_size,
                                      self.trg_lookup_table if wargs.copy_trg_emb is True else None)
 
@@ -87,9 +87,10 @@ class BackwardDecoder(nn.Module):
         tlen_batch_m = []
         mask_next_time = [False] * b_size
         greedy_search_state = s_tm1
+        y_mask = Variable(tc.FloatTensor([1] * b_size).cuda())
         y_tm1 = ys_e[0]
         for k in range(wargs.max_seq_len + 1):
-            attend, greedy_search_state, y_tm1, _ = self.step(greedy_search_state, xs_h, uh, y_tm1, xs_mask if xs_mask is not None else None, ys_mask)
+            attend, greedy_search_state, y_tm1, _ = self.step(greedy_search_state, xs_h, uh, y_tm1, xs_mask if xs_mask is not None else None, y_mask)
             states.append(greedy_search_state)
             tlen_batch_m.append(y_mask)
             logit = self.step_out(greedy_search_state, y_tm1, attend)
